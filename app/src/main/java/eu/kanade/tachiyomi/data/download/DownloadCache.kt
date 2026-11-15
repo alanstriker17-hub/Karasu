@@ -65,8 +65,9 @@ class DownloadCache(
     private val provider: DownloadProvider = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
     private val storageManager: StorageManager = Injekt.get(),
-    private val safIndex: SafIndexDatabase = Injekt.get(),
 ) {
+
+    private val safIndex: SafIndexDatabase = Injekt.get()
 
     val scope = CoroutineScope(Dispatchers.IO)
 
@@ -395,7 +396,7 @@ class DownloadCache(
      * @param manga the manga to remove.
      */
     suspend fun removeManga(manga: Manga) {
-        manga.id?.let(safIndex::removeManga)
+        manga.id?.let { mangaId -> safIndex.removeManga(mangaId) }
         rootDownloadsDirLock.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             val mangaDirName = provider.getMangaDirName(manga)

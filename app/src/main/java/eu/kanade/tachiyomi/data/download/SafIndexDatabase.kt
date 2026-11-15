@@ -237,7 +237,7 @@ internal class SafIndexDatabase(
                 val mimeColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
                 val sizeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
                 val modifiedColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-                buildList {
+                buildList<SafIndexedDocument> {
                     while (cursor.moveToNext()) {
                         val documentId = cursor.getString(idColumn) ?: continue
                         val name = cursor.getString(nameColumn) ?: continue
