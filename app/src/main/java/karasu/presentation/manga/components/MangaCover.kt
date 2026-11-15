@@ -18,7 +18,6 @@ import coil3.compose.AsyncImagePainter
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
-import coil3.request.precision
 import coil3.size.Precision
 import eu.kanade.tachiyomi.R
 import karasu.util.rememberResourceBitmapPainter

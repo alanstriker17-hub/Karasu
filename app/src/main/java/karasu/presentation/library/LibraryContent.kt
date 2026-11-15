@@ -40,13 +40,13 @@ fun LibraryContent(
                         Text("Manga: ${item.libraryManga.manga.title}")
                     }
                 }
-
-                private fun LibraryItem.stableKey(): String = when (this) {
-                    is LibraryItem.Blank -> "blank:$mangaCount"
-                    is LibraryItem.Hidden -> "hidden:$title"
-                    is LibraryItem.Manga -> "manga:${libraryManga.manga.id ?: libraryManga.manga.url}"
-                }
             }
         }
     }
+}
+
+private fun LibraryItem.stableKey(): String = when (this) {
+    is LibraryItem.Blank -> "blank:$mangaCount"
+    is LibraryItem.Hidden -> "hidden:$title"
+    is LibraryItem.Manga -> "manga:${libraryManga.manga.id ?: libraryManga.manga.url}"
 }
