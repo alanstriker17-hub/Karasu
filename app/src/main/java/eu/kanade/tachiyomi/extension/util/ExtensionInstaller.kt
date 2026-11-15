@@ -6,10 +6,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.net.toUri
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.extension.ExtensionInstallerJob
@@ -23,6 +25,7 @@ import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.toast
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,6 +47,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -115,6 +119,16 @@ internal class ExtensionInstaller(private val context: Context) {
      */
     suspend fun downloadAndInstall(url: String, extension: ExtensionManager.ExtensionInfo, scope: CoroutineScope): Flow<ExtensionIntallInfo> {
         val pkgName = extension.pkgName
+        try {
+            withContext(Dispatchers.IO) {
+                backupPreviousVersionIfUpdating(extension)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.e(e) { "Could not back up the installed extension $pkgName" }
+            return flowOf(InstallStep.Error to null)
+        }
 
         val oldDownload = activeDownloads[pkgName]
         if (oldDownload != null) {
@@ -297,6 +311,80 @@ internal class ExtensionInstaller(private val context: Context) {
         }
     }
 
+    fun hasRollbackApk(pkgName: String): Boolean {
+        val apk = rollbackApk(pkgName) ?: return false
+        if (!apk.isFile || apk.length() <= 0L) return false
+        val previous = context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0) ?: return false
+        if (previous.packageName != pkgName) return false
+        val currentVersion = installedVersionCode(pkgName) ?: return false
+        return PackageInfoCompat.getLongVersionCode(previous) < currentVersion
+    }
+
+    fun installRollbackApk(pkgName: String): Boolean {
+        val apk = rollbackApk(pkgName)?.takeIf { hasRollbackApk(pkgName) } ?: return false
+        if (pkgName in activeDownloads) return false
+
+        activeDownloads[pkgName] = ROLLBACK_DOWNLOAD_ID
+        return try {
+            installApk(ROLLBACK_DOWNLOAD_ID, apk.getUriCompat(context))
+            true
+        } catch (e: Exception) {
+            activeDownloads.remove(pkgName)
+            Logger.e(e) { "Could not start rollback for extension $pkgName" }
+            false
+        }
+    }
+
+    private fun backupPreviousVersionIfUpdating(extension: ExtensionManager.ExtensionInfo) {
+        val installedVersion = installedVersionCode(extension.pkgName) ?: return
+        if (extension.versionCode <= installedVersion) return
+
+        val packageInfo = context.packageManager.getPackageInfo(extension.pkgName, 0)
+        val sourcePath = packageInfo.applicationInfo?.sourceDir
+            ?: throw IOException("Installed extension has no base APK path")
+        val source = File(sourcePath)
+        if (!source.isFile || source.length() <= 0L) {
+            throw IOException("Installed extension base APK is unavailable")
+        }
+
+        val backup = rollbackApk(extension.pkgName)
+            ?: throw IOException("Invalid extension package name")
+        val directory = backup.parentFile
+            ?: throw IOException("Rollback directory is unavailable")
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw IOException("Could not create extension rollback directory")
+        }
+
+        val temporary = File(directory, "${backup.name}.tmp")
+        try {
+            source.inputStream().use { input ->
+                temporary.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (backup.exists() && !backup.delete()) {
+                throw IOException("Could not replace the previous rollback APK")
+            }
+            if (!temporary.renameTo(backup)) {
+                throw IOException("Could not save the rollback APK")
+            }
+        } finally {
+            temporary.delete()
+        }
+    }
+
+    private fun installedVersionCode(pkgName: String): Long? {
+        val packageInfo = try {
+            context.packageManager.getPackageInfo(pkgName, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return null
+        }
+        return PackageInfoCompat.getLongVersionCode(packageInfo)
+    }
+
+    private fun rollbackApk(pkgName: String): File? {
+        if (!PACKAGE_NAME_REGEX.matches(pkgName)) return null
+        return File(File(context.filesDir, ROLLBACK_DIRECTORY), "$pkgName.apk")
+    }
+
     private fun installPrivately(downloadId: Long, pkgName: String?, uri: Uri) {
         val tempFile = File(context.cacheDir, "temp_$downloadId")
 
@@ -397,7 +485,7 @@ internal class ExtensionInstaller(private val context: Context) {
      */
     private fun deleteDownload(pkgName: String) {
         val downloadId = activeDownloads.remove(pkgName)
-        if (downloadId != null) {
+        if (downloadId != null && downloadId > 0) {
             downloadManager.remove(downloadId)
         }
         ExtensionInstallerJob.removeActiveInstall(pkgName)
@@ -479,6 +567,9 @@ internal class ExtensionInstaller(private val context: Context) {
         const val APK_MIME = "application/vnd.android.package-archive"
         const val EXTRA_DOWNLOAD_ID = "ExtensionInstaller.extra.DOWNLOAD_ID"
         const val FILE_SCHEME = "file://"
+        private const val ROLLBACK_DIRECTORY = "extension_rollback"
+        private const val ROLLBACK_DOWNLOAD_ID = -1L
+        private val PACKAGE_NAME_REGEX = Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")
     }
 }
 

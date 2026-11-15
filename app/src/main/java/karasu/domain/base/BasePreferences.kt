@@ -31,6 +31,42 @@ class BasePreferences(private val preferenceStore: PreferenceStore) {
 
     fun displayProfile() = preferenceStore.getString("pref_display_profile_key", "")
 
+    fun extensionRepoMirrors() = preferenceStore.getString("extension_repo_mirrors", "")
+
+    fun extensionRepoMirrorsFor(baseUrl: String): List<String> {
+        val primary = baseUrl.trim().trimEnd('/')
+        return extensionRepoMirrors().get()
+            .lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf('\t')
+                if (separator <= 0 || line.substring(0, separator) != primary) {
+                    null
+                } else {
+                    line.substring(separator + 1).trim().takeIf(String::isNotEmpty)
+                }
+            }
+            .toList()
+    }
+
+    fun setExtensionRepoMirrors(baseUrl: String, mirrors: List<String>) {
+        val primary = baseUrl.trim().trimEnd('/')
+        val entries = extensionRepoMirrors().get()
+            .lineSequence()
+            .filter { it.substringBefore('\t') != primary }
+            .toMutableList()
+        entries += mirrors.map { mirror -> "$primary\t${mirror.trim().trimEnd('/')}" }
+        extensionRepoMirrors().set(entries.filter(String::isNotBlank).joinToString("\n"))
+    }
+
+    fun displayRefreshRate() = preferenceStore.getEnum("pref_display_refresh_rate", DisplayRefreshRate.SYSTEM)
+
+    enum class DisplayRefreshRate(val titleResId: StringResource) {
+        SYSTEM(MR.strings.display_refresh_rate_system),
+        ADAPTIVE(MR.strings.display_refresh_rate_adaptive),
+        LOCK_90(MR.strings.display_refresh_rate_90),
+        LOCK_120(MR.strings.display_refresh_rate_120),
+    }
+
     fun hasShownOnboarding() = preferenceStore.getBoolean(Preference.appStateKey("onboarding_complete"), false)
 
 

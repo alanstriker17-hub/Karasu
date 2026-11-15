@@ -7,6 +7,12 @@ class LibraryPreferences(private val preferenceStore: PreferenceStore) {
 
     fun markDuplicateReadChapterAsRead() = preferenceStore.getStringSet("mark_duplicate_read_chapter_read", emptySet())
 
+    fun preferredScanlators() = preferenceStore.getStringSet("preferred_scanlators", emptySet())
+
+    fun blockedScanlators() = preferenceStore.getStringSet("blocked_scanlators", emptySet())
+
+    fun autoIncognitoCategories() = preferenceStore.getStringSet("auto_incognito_categories", emptySet())
+
     /** When the calendar-driven sweep of the category rules last ran. See `ApplyCategoryRules`. */
     fun lastCategoryRuleSweep() = preferenceStore.getLong("last_category_rule_sweep", 0)
 

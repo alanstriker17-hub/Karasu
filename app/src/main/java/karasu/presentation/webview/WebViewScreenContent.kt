@@ -3,6 +3,7 @@ package karasu.presentation.webview
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Message
+import android.view.ViewGroup
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.WebResourceRequest
@@ -111,6 +112,15 @@ fun WebViewScreenContent(
 
     DisposableEffect(Unit) {
         onDispose { isActive = false }
+    }
+
+    DisposableEffect(windowStack) {
+        onDispose {
+            windowStack.items.mapNotNull { it.webView }.distinct().forEach { webView ->
+                webView.destroyAndDetach()
+            }
+            windowStack.items.forEach { it.webView = null }
+        }
     }
 
     val webClient = remember {
@@ -373,7 +383,7 @@ fun WebViewScreenContent(
                     if (window == null) {
                         // If we couldn't find any window on the stack that owns this WebView, it means that we can
                         // safely dispose of it because the window containing it has been closed.
-                        webView.destroy()
+                        webView.destroyAndDetach()
                     } else {
                         // The composable is being disposed but the WebView object is not.
                         // When the WebView element is recomposed, we will want the WebView to resume from its state
@@ -395,4 +405,12 @@ fun WebViewScreenContent(
             )
         }
     }
+}
+
+private fun WebView.destroyAndDetach() {
+    (parent as? ViewGroup)?.removeView(this)
+    stopLoading()
+    clearHistory()
+    removeAllViews()
+    destroy()
 }

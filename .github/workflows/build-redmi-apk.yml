@@ -5,6 +5,7 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && format('Build and Rele
 on:
   push:
     branches:
+      - main
       - master
       - backport/**
   workflow_dispatch:
@@ -115,7 +116,7 @@ jobs:
 
       # NIGHTLY
       - name: Prepare nightly build
-        if: steps.branch_name.outputs.NAME == 'master' && github.event.inputs.version == ''
+        if: (steps.branch_name.outputs.NAME == 'master' || steps.branch_name.outputs.NAME == 'main') && github.event.inputs.version == ''
         run: |
           set -x
           echo "VERSION_TAG=r$(git rev-list --count HEAD)" >> $GITHUB_ENV

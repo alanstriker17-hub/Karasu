@@ -14,7 +14,9 @@ import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.view.inflate
 import eu.kanade.tachiyomi.util.view.setPositiveButton
+import eu.kanade.tachiyomi.util.view.setNegativeButton
 import eu.kanade.tachiyomi.util.view.setText
+import eu.kanade.tachiyomi.util.system.toast
 import karasu.i18n.MR
 import karasu.util.lang.getString
 import android.R as AR
@@ -78,6 +80,20 @@ class ExtensionDetailsHeaderAdapter(private val presenter: ExtensionDetailsPrese
             binding.extensionAppInfoButton.isVisible = extension.isShared
             if (!extension.isShared) {
                 binding.extensionUninstallButton.text = context.getString(MR.strings.remove)
+            }
+
+            binding.extensionRollbackButton.isVisible = presenter.hasRollbackApk()
+            binding.extensionRollbackButton.setOnClickListener {
+                context.materialAlertDialog()
+                    .setTitle(context.getString(MR.strings.extension_rollback))
+                    .setMessage(context.getString(MR.strings.extension_rollback_confirm))
+                    .setPositiveButton(MR.strings.extension_rollback) { _, _ ->
+                        if (!presenter.rollbackExtension()) {
+                            context.toast(MR.strings.extension_rollback_failed)
+                        }
+                    }
+                    .setNegativeButton(AR.string.cancel, null)
+                    .show()
             }
 
             if (extension.isObsolete) {

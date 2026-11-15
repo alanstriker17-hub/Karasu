@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.extension.api
 
 import android.content.Context
+import android.os.SystemClock
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.model.Extension
@@ -10,12 +11,18 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
+import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.util.system.withIOContext
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.protobuf.ProtoBuf
+import okhttp3.Request
 import okio.BufferedSource
 import okio.buffer
 import okio.gzip
@@ -25,12 +32,14 @@ import uy.kohesive.injekt.injectLazy
 import karasu.domain.extension.repo.interactor.GetExtensionRepo
 import karasu.domain.extension.repo.interactor.UpdateExtensionRepo
 import karasu.domain.extension.repo.model.ExtensionRepo
+import karasu.domain.base.BasePreferences
 
 internal class ExtensionApi {
 
     private val networkService: NetworkHelper by injectLazy()
     private val getExtensionRepo: GetExtensionRepo by injectLazy()
     private val updateExtensionRepo: UpdateExtensionRepo by injectLazy()
+    private val basePreferences: BasePreferences by injectLazy()
     private val protoBuf: ProtoBuf by injectLazy()
 
     suspend fun findExtensions(): List<Extension.Available> {
@@ -44,17 +53,25 @@ internal class ExtensionApi {
 
     private suspend fun getExtensions(
         repo: ExtensionRepo,
-    ): List<Extension.Available> {
-        val repoBaseUrl = repo.baseUrl
-        return try {
-            // Prefer protobuf index; Keiyoushi stubbed index.min.json with "Outdated App" entries
-            fetchProtobufExtensions(repoBaseUrl)
-                ?.takeIf { it.isNotEmpty() }
-                ?: fetchJsonExtensions(repoBaseUrl)
-        } catch (e: Throwable) {
-            Logger.e(e) { "Failed to get extensions from $repoBaseUrl" }
-            emptyList()
+    ): List<Extension.Available> = withIOContext {
+        val repoUrls = (listOf(repo.baseUrl) + basePreferences.extensionRepoMirrorsFor(repo.baseUrl)).distinct()
+        var lastError: Exception? = null
+        for (repoUrl in repoUrls) {
+            try {
+                // Prefer protobuf index; Keiyoushi stubbed index.min.json with "Outdated App" entries.
+                val protobuf = fetchProtobufExtensions(repoUrl)
+                return@withIOContext protobuf
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: fetchJsonExtensions(repoUrl)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastError = e
+                Logger.w(e) { "Failed to fetch extensions from $repoUrl; trying the next mirror" }
+            }
         }
+        lastError?.let { Logger.e(it) { "Failed to get extensions from ${repo.baseUrl} and its mirrors" } }
+        emptyList()
     }
 
     private suspend fun fetchProtobufExtensions(repoBaseUrl: String): List<Extension.Available>? {
@@ -70,7 +87,9 @@ internal class ExtensionApi {
                     .orEmpty()
                     .toAvailableExtensions(repoBaseUrl)
             }
-        } catch (e: Throwable) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             Logger.d(e) { "No protobuf index at $repoBaseUrl, falling back to JSON" }
             null
         }
@@ -114,6 +133,48 @@ internal class ExtensionApi {
 
             extensionsWithUpdate
         }
+    }
+
+    suspend fun checkRepoHealth(): List<ExtensionRepoHealth> = withIOContext {
+        val repoUrls = getExtensionRepo.getAll()
+            .flatMap { repo -> listOf(repo.baseUrl) + basePreferences.extensionRepoMirrorsFor(repo.baseUrl) }
+            .distinct()
+        val semaphore = Semaphore(3)
+        repoUrls.map { repoUrl ->
+            async {
+                semaphore.withPermit {
+                    val client = networkService.client.newBuilder()
+                        .apply {
+                            interceptors().removeAll { it is CloudflareInterceptor }
+                        }
+                        .callTimeout(3, TimeUnit.SECONDS)
+                        .build()
+                    val latencyMs = listOf("index.pb", "index.min.json").firstNotNullOfOrNull { index ->
+                        val startedAt = SystemClock.elapsedRealtime()
+                        try {
+                            val request = Request.Builder()
+                                .url("$repoUrl/$index")
+                                .head()
+                                .build()
+                            client.newCall(request).execute().use { response ->
+                                if (response.isSuccessful) {
+                                    SystemClock.elapsedRealtime() - startedAt
+                                } else {
+                                    null
+                                }
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Logger.w(e) { "Extension repository index probe failed: $repoUrl/$index" }
+                            null
+                        }
+                    }
+                    if (latencyMs == null) Logger.w { "Extension repository is unreachable: $repoUrl" }
+                    ExtensionRepoHealth(repoUrl, latencyMs)
+                }
+            }
+        }.awaitAll()
     }
 
     private fun List<ExtensionIndexDto.Extension>.toAvailableExtensions(repoUrl: String): List<Extension.Available> {
@@ -196,6 +257,8 @@ internal class ExtensionApi {
         return version.substringBeforeLast('.').toDouble()
     }
 }
+
+data class ExtensionRepoHealth(val repoUrl: String, val latencyMs: Long?)
 
 @Serializable
 private data class ExtensionJsonObject(

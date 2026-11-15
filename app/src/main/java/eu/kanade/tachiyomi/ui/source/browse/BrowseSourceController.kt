@@ -39,6 +39,8 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.BrowseSourceControllerBinding
 import eu.kanade.tachiyomi.domain.manga.models.Manga
+import eu.kanade.tachiyomi.network.HttpException
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.LocalSource
@@ -96,6 +98,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -143,6 +146,7 @@ open class BrowseSourceController(bundle: Bundle) :
     )
 
     private val getManga: GetManga by injectLazy()
+    private val networkHelper: NetworkHelper by injectLazy()
 
     /**
      * Preferences helper.
@@ -790,6 +794,19 @@ open class BrowseSourceController(bundle: Bundle) :
             }
             presenter.requestNext()
         }
+        val httpErrorCode = generateSequence(error) { it.cause }
+            .filterIsInstance<HttpException>()
+            .firstOrNull()
+            ?.code
+        val resetSessionUrl = if (httpErrorCode in setOf(403, 503)) {
+            (presenter.source as? HttpSource)?.baseUrl?.toHttpUrlOrNull()
+        } else {
+            null
+        }
+        val resetSessionAndRetry = {
+            resetSessionUrl?.let(networkHelper.perSourceSessionManager::clearSessionForUrl)
+            retryAction()
+        }
 
         if (adapter.isEmpty) {
             val actions = emptyList<EmptyView.Action>().toMutableList()
@@ -800,6 +817,9 @@ open class BrowseSourceController(bundle: Bundle) :
                 ) { openLocalSourceHelpGuide() }
             } else {
                 EmptyView.Action(MR.strings.retry, retryAction)
+            }
+            if (resetSessionUrl != null) {
+                actions += EmptyView.Action(MR.strings.reset_session, resetSessionAndRetry)
             }
 
             if (presenter.source is HttpSource) {
@@ -819,7 +839,11 @@ open class BrowseSourceController(bundle: Bundle) :
             )
         } else {
             snack = binding.sourceLayout.snack(message, Snackbar.LENGTH_INDEFINITE) {
-                setAction(MR.strings.retry) { retryAction() }
+                if (resetSessionUrl == null) {
+                    setAction(MR.strings.retry) { retryAction() }
+                } else {
+                    setAction(MR.strings.reset_session) { resetSessionAndRetry() }
+                }
             }
         }
         if (isControllerVisible) {

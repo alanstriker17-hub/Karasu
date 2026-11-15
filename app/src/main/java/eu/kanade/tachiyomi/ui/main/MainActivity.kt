@@ -111,6 +111,7 @@ import eu.kanade.tachiyomi.ui.source.globalsearch.GlobalSearchController
 import eu.kanade.tachiyomi.util.manga.MangaCoverMetadata
 import eu.kanade.tachiyomi.util.manga.MangaShortcutManager
 import eu.kanade.tachiyomi.util.showNotificationPermissionPrompt
+import eu.kanade.tachiyomi.util.system.DisplayRefreshRateController
 import eu.kanade.tachiyomi.util.system.contextCompatDrawable
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.e
@@ -221,6 +222,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         }
 
     private val basePreferences: BasePreferences by injectLazy()
+    private val displayRefreshRateController by lazy { DisplayRefreshRateController(window) }
 
     // Ideally we want this to be inside the controller itself, but Conductor doesn't support the new ActivityResult API
     // Should be fine once we moved completely to Compose..... someday....
@@ -958,6 +960,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     override fun onResume() {
         super.onResume()
+        displayRefreshRateController.onResume(basePreferences.displayRefreshRate().get())
         checkForAppUpdates()
         lifecycleScope.launchIO {
             extensionManager.getExtensionUpdates(false)
@@ -1000,6 +1003,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     }
 
     override fun onPause() {
+        displayRefreshRateController.onPause()
         super.onPause()
         snackBar?.dismiss()
         setStartingTab()
@@ -1199,6 +1203,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     }
 
     override fun onDestroy() {
+        displayRefreshRateController.close()
         super.onDestroy()
         overflowDialog?.dismiss()
         overflowDialog = null
@@ -1432,6 +1437,9 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        if (ev?.action == MotionEvent.ACTION_DOWN || ev?.action == MotionEvent.ACTION_MOVE) {
+            displayRefreshRateController.onInteraction()
+        }
         ev?.let {
             gestureDetector?.onTouchEvent(it)
             (router.backstack.lastOrNull()?.controller as? LibraryController)?.handleGeneralEvent(it)
@@ -1459,6 +1467,10 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             }
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    fun updateDisplayRefreshRate(value: BasePreferences.DisplayRefreshRate) {
+        displayRefreshRateController.onPreferenceChanged(value)
     }
 
     protected fun canShowFloatingToolbar(controller: Controller?) =

@@ -45,7 +45,7 @@
             android:clipChildren="false"
             android:clipToPadding="false"
             app:collapseIcon="@drawable/ic_arrow_back_24dp"
-            app:layout_constraintBottom_toTopOf="@id/tabs"
+            app:layout_constraintBottom_toTopOf="@id/repo_health"
             app:layout_constraintHeight_max="?mainActionBarSize"
             app:layout_constraintTop_toBottomOf="@id/pill"
             app:layout_constraintVertical_bias="1.0"
@@ -79,12 +79,28 @@
             android:background="@android:color/transparent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/pill"
+            app:layout_constraintTop_toBottomOf="@id/repo_health"
             app:tabTextColor="@color/tabs_selector_background"
             app:tabIndicatorColor="?attr/colorSecondary"
             app:tabMaxWidth="0dp"
             app:tabGravity="fill"
             app:tabMode="fixed" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/repo_health"
+            style="?textAppearanceBodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="8dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/tabs"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/sheet_toolbar" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.viewpager.widget.ViewPager

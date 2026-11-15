@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.BitmapDrawable
@@ -24,6 +25,7 @@ import coil3.dispose
 import coil3.imageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import coil3.request.bitmapConfig
 import coil3.request.crossfade
 import coil3.size.Precision
 import coil3.size.ViewSizeResolver
@@ -235,12 +237,25 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 isVisible = true
             }
             is BufferedSource -> {
+                val lowMemory = isLowMemory()
+                setMaxTileSize(
+                    if (lowMemory) minOf(ImageUtil.hardwareBitmapThreshold, MAX_LOW_MEMORY_TILE_SIZE)
+                    else ImageUtil.hardwareBitmapThreshold,
+                )
                 // SSIV doesn't tile bitmaps, so if the image exceeded max texture size it won't load regardless.
                 if (!isWebtoon || ImageUtil.isMaxTextureSizeExceeded(data)) {
-                    setHardwareConfig(!ImageUtil.isHardwareThresholdExceeded(data))
+                    setHardwareConfig(!lowMemory && !ImageUtil.isHardwareThresholdExceeded(data))
                     setImage(ImageSource.inputStream(data.inputStream()))
                     isVisible = true
                     return@apply
+                }
+
+                val bitmapConfig = if (
+                    ImageUtil.findImageType { data.peek().inputStream() } == ImageUtil.ImageType.JPEG
+                ) {
+                    Bitmap.Config.RGB_565
+                } else {
+                    Bitmap.Config.ARGB_8888
                 }
 
                 ImageRequest.Builder(context)
@@ -259,6 +274,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     )
                     .size(ViewSizeResolver(this@ReaderPageImageView))
                     .precision(Precision.INEXACT)
+                    .bitmapConfig(bitmapConfig)
                     .cropBorders(config.cropBorders)
                     .customDecoder(true)
                     .crossfade(false)
@@ -343,6 +359,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
         return (this * context.animatorDurationScale).toInt().coerceAtLeast(1)
     }
 
+    private fun isLowMemory(): Boolean {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val availableMemory = maxMemory - runtime.totalMemory() + runtime.freeMemory()
+        return maxMemory > 0 && availableMemory < maxMemory * LOW_MEMORY_THRESHOLD
+    }
+
     /**
      * All of the config except [zoomDuration] will only be used for non-animated image.
      */
@@ -370,3 +393,5 @@ open class ReaderPageImageView @JvmOverloads constructor(
 }
 
 private const val MAX_ZOOM_SCALE = 5F
+private const val MAX_LOW_MEMORY_TILE_SIZE = 2048
+private const val LOW_MEMORY_THRESHOLD = 0.15

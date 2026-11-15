@@ -41,6 +41,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import karasu.domain.category.interactor.GetCategories
+import karasu.domain.chapter.interactor.GetChapter
 import karasu.domain.library.LibraryPreferences
 import karasu.domain.manga.interactor.GetLibraryManga
 import karasu.domain.manga.interval.RecalculateReleaseEstimates
@@ -55,6 +56,7 @@ class SettingsLibraryController : SettingsLegacyController() {
 
     private val getLibraryManga: GetLibraryManga by injectLazy()
     private val getCategories: GetCategories by injectLazy()
+    private val getChapter: GetChapter by injectLazy()
 
     private val uiPreferences: UiPreferences by injectLazy()
     private val libraryPreferences: LibraryPreferences by injectLazy()
@@ -369,6 +371,29 @@ class SettingsLibraryController : SettingsLegacyController() {
                 entriesRes = entries.keys.toTypedArray()
                 entryValues = entries.values.toList()
                 noSelectionRes = MR.strings.none
+            }
+        }
+
+        val scanlators = runBlocking { getChapter.awaitAllScanlators().sorted() }
+        if (scanlators.isNotEmpty()) {
+            preferenceCategory {
+                titleRes = MR.strings.scanlators
+
+                multiSelectListPreferenceMat(activity) {
+                    bindTo(libraryPreferences.preferredScanlators())
+                    titleRes = MR.strings.preferred_scanlators
+                    entries = scanlators
+                    entryValues = scanlators
+                    noSelectionRes = MR.strings.none
+                }
+
+                multiSelectListPreferenceMat(activity) {
+                    bindTo(libraryPreferences.blockedScanlators())
+                    titleRes = MR.strings.blocked_scanlators
+                    entries = scanlators
+                    entryValues = scanlators
+                    noSelectionRes = MR.strings.none
+                }
             }
         }
     }

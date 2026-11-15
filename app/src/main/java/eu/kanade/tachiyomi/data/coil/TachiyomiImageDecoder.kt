@@ -11,7 +11,6 @@ import coil3.decode.ImageSource
 import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import coil3.request.bitmapConfig
-import eu.kanade.tachiyomi.util.system.GLUtil
 import eu.kanade.tachiyomi.util.system.ImageUtil
 import okio.BufferedSource
 import tachiyomi.decoder.ImageDecoder
@@ -40,12 +39,27 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
             dstWidth = dstWidth,
             dstHeight = dstHeight,
             scale = options.scale,
-        )
+        ).let { calculated ->
+            if (isLowMemory() && srcWidth > 0 && srcHeight / srcWidth > 3) maxOf(calculated, 2) else calculated
+        }
 
-        var bitmap = decoder.decode(sampleSize = sampleSize)
-        decoder.recycle()
+        val decodedBitmap = try {
+            decoder.decode(sampleSize = sampleSize)
+        } finally {
+            decoder.recycle()
+        }
+        var bitmap = decodedBitmap ?: error("Failed to decode image.")
 
-        check(bitmap != null) { "Failed to decode image." }
+        if (
+            options.bitmapConfig == Bitmap.Config.RGB_565 &&
+            bitmap.config != Bitmap.Config.RGB_565 &&
+            hasMemoryForBitmapConversion(bitmap)
+        ) {
+            bitmap.copy(Bitmap.Config.RGB_565, false)?.let { converted ->
+                bitmap.recycle()
+                bitmap = converted
+            }
+        }
 
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -63,6 +77,21 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
             image = bitmap.asImage(),
             isSampled = sampleSize > 1,
         )
+    }
+
+    private fun isLowMemory(): Boolean {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val availableMemory = maxMemory - runtime.totalMemory() + runtime.freeMemory()
+        return maxMemory > 0 && availableMemory < maxMemory * LOW_MEMORY_THRESHOLD
+    }
+
+    private fun hasMemoryForBitmapConversion(bitmap: Bitmap): Boolean {
+        val runtime = Runtime.getRuntime()
+        val maxMemory = runtime.maxMemory()
+        val availableMemory = maxMemory - runtime.totalMemory() + runtime.freeMemory()
+        val requiredMemory = bitmap.byteCount / 2L + BITMAP_CONVERSION_HEADROOM_BYTES
+        return maxMemory > 0 && availableMemory >= requiredMemory
     }
 
     class Factory : Decoder.Factory {
@@ -91,3 +120,6 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
         var displayProfile: ByteArray? = null
     }
 }
+
+private const val LOW_MEMORY_THRESHOLD = 0.15
+private const val BITMAP_CONVERSION_HEADROOM_BYTES = 8L * 1024 * 1024

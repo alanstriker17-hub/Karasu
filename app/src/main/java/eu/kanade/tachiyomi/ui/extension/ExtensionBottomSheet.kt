@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.WindowInsetsCompat.Type.systemBars
+import androidx.core.view.isVisible
 import androidx.core.view.updatePaddingRelative
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -20,6 +21,7 @@ import eu.kanade.tachiyomi.databinding.RecyclerWithScrollerBinding
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
 import eu.kanade.tachiyomi.extension.model.InstalledExtensionsOrder
+import eu.kanade.tachiyomi.extension.api.ExtensionRepoHealth
 import eu.kanade.tachiyomi.ui.extension.details.ExtensionDetailsController
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.migration.BaseMigrationInterface
@@ -204,6 +206,18 @@ class ExtensionBottomSheet @JvmOverloads constructor(context: Context, attrs: At
         } else {
             binding.tabs.getTabAt(0)?.removeBadge()
         }
+    }
+
+    fun setRepoHealth(health: List<ExtensionRepoHealth>) {
+        binding.repoHealth.isVisible = health.isNotEmpty()
+        if (health.isEmpty()) return
+
+        val status = health.joinToString(" · ") { repo ->
+            val host = repo.repoUrl.substringAfter("://").substringBefore('/')
+            val latency = repo.latencyMs?.let { "${it}ms" } ?: context.getString(MR.strings.unreachable)
+            "$host $latency"
+        }
+        binding.repoHealth.text = context.getString(MR.strings.extension_repo_health, status)
     }
 
     override fun onButtonClick(position: Int) {

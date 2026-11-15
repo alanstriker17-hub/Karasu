@@ -90,6 +90,8 @@
     <string name="by_chapter_number">By chapter number</string>
     <string name="by_update_date">By upload date</string>
     <string name="scanlators">Scanlators</string>
+    <string name="preferred_scanlators">Preferred scanlators</string>
+    <string name="blocked_scanlators">Blocked scanlators</string>
 
     <!-- Category -->
     <string name="category">Category</string>
@@ -539,6 +541,15 @@
     <string name="extension_updates">Extension updates</string>
     <string name="extension_updates_pending">Extension updates pending</string>
     <string name="extension_info">Extension info</string>
+    <string name="extension_rollback">Rollback to previous version</string>
+    <string name="extension_rollback_confirm">Install the previous APK for this extension?</string>
+    <string name="extension_rollback_failed">Could not start the extension rollback</string>
+    <string name="extension_repo_mirrors">Configure mirrors</string>
+    <string name="extension_repo_mirrors_title">Repository mirrors</string>
+    <string name="extension_repo_mirrors_summary">Enter one mirror base URL per line</string>
+    <string name="extension_repo_mirror_invalid">Enter valid HTTP or HTTPS mirror URLs</string>
+    <string name="extension_repo_health">Repository status: %1$s</string>
+    <string name="unreachable">unreachable</string>
     <string name="filter_languages">Filter Languages</string>
     <string name="obsolete">Obsolete</string>
     <string name="pending">Pending</string>
@@ -587,6 +598,7 @@
     <string name="next_chapter_not_found">Next chapter not found</string>
     <string name="decode_image_error">The image couldn\'t be loaded</string>
     <string name="try_another_source">Try another source</string>
+    <string name="reset_session">Reset session</string>
     <string name="broken_source_read_failing">Failing while reading</string>
     <string name="merge_source_missing">extension not installed</string>
     <string name="merge_suggestion">Also on %1$s</string>
@@ -979,6 +991,7 @@
     <string name="category_add_rule">Add a rule to this category</string>
     <string name="category_add_rule_summary">Opens the rule editor after saving. Rules move entries out of a category on their own.</string>
     <string name="category_rules">Rules</string>
+    <string name="auto_incognito">Auto-incognito for this category</string>
     <string name="category_rules_explainer">Entries in this category are checked against the
         rules below, top to bottom, and the first one that matches moves them.</string>
     <string name="category_rules_empty">No rules yet, so nothing ever leaves this category on
@@ -1063,6 +1076,11 @@
     <string name="general">General</string>
     <string name="reader">Reader</string>
     <string name="appearance">Appearance</string>
+    <string name="display_refresh_rate">Display refresh rate</string>
+    <string name="display_refresh_rate_system">System default</string>
+    <string name="display_refresh_rate_adaptive">Adaptive</string>
+    <string name="display_refresh_rate_90">Lock to 90 Hz</string>
+    <string name="display_refresh_rate_120">Lock to 120 Hz</string>
     <string name="advanced">Advanced</string>
     <string name="about">About</string>
     <string name="help">Help</string>

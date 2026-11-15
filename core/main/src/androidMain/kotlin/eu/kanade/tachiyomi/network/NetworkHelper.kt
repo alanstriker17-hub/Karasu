@@ -1,9 +1,10 @@
 package eu.kanade.tachiyomi.network
 
 import android.content.Context
+import android.webkit.WebSettings
+import eu.kanade.tachiyomi.network.interceptor.AutoUserAgentInterceptor
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
-import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import java.io.File
 import java.util.concurrent.TimeUnit
 import okhttp3.Cache
@@ -16,6 +17,7 @@ class NetworkHelper(
 ) {
 
     val cookieJar = AndroidCookieJar()
+    val perSourceSessionManager = PerSourceSessionManager(cookieJar)
 
     val flareSolverr = FlareSolverr(
         cookieJar = cookieJar,
@@ -36,11 +38,10 @@ class NetworkHelper(
                 )
             )
             .addInterceptor(UncaughtExceptionInterceptor())
-            // Pinning a host to the agent that solved it only makes sense while the fallback is on:
-            // clearing the URL has to release those hosts, or they stay pinned to a desktop agent
-            // forever. Dropping it just 403s once and lets the WebView re-solve normally.
+            // Auto-detect the system WebView User-Agent and keep a source-specific override path for
+            // Cloudflare/host workarounds without forcing every source through a custom UA.
             .addInterceptor(
-                UserAgentInterceptor(::defaultUserAgent) { host ->
+                AutoUserAgentInterceptor(context, ::defaultUserAgent) { host ->
                     if (flareSolverr.isEnabled) flareSolverr.userAgents[host] else null
                 },
             )
@@ -76,6 +77,11 @@ class NetworkHelper(
     @Suppress("UNUSED")
     val cloudflareClient: OkHttpClient = client
 
-    val defaultUserAgent
-        get() = preferences.defaultUserAgent().get().replace("\n", " ").trim()
+    val defaultUserAgent: String
+        get() {
+            val configured = preferences.defaultUserAgent().get().replace("\n", " ").trim()
+            return configured
+                .takeUnless { it.isBlank() || it == NetworkPreferences.DEFAULT_USER_AGENT }
+                ?: WebSettings.getDefaultUserAgent(context).replace("\n", " ").trim()
+        }
 }

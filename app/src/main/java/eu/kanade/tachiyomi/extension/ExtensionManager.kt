@@ -7,6 +7,7 @@ import android.os.Parcelable
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.api.ExtensionApi
+import eu.kanade.tachiyomi.extension.api.ExtensionRepoHealth
 import eu.kanade.tachiyomi.extension.installer.ShizukuInstaller
 import eu.kanade.tachiyomi.extension.model.Extension
 import eu.kanade.tachiyomi.extension.model.InstallStep
@@ -105,6 +106,9 @@ class ExtensionManager(
     private val _availableExtensionsFlow = MutableStateFlow(emptyList<Extension.Available>())
     val availableExtensionsFlow = _availableExtensionsFlow.asStateFlow()
 
+    private val _repoHealthFlow = MutableStateFlow(emptyList<ExtensionRepoHealth>())
+    val repoHealthFlow = _repoHealthFlow.asStateFlow()
+
     private var availableSources = hashMapOf<Long, Extension.AvailableSource>()
 
     private val _untrustedExtensionsFlow = MutableStateFlow(emptyList<Extension.Untrusted>())
@@ -170,6 +174,10 @@ class ExtensionManager(
         updatedInstalledExtensionsStatuses(extensions)
         setupAvailableSourcesMap()
         emitToInstaller("Finished/Available/${extensions.size}", (InstallStep.Done to null))
+    }
+
+    suspend fun refreshRepoHealth() {
+        _repoHealthFlow.value = api.checkRepoHealth()
     }
 
     /**
@@ -270,6 +278,10 @@ class ExtensionManager(
     fun cleanUpInstallation(pkgName: String) {
         installer.cleanUpInstallation(pkgName)
     }
+
+    fun hasRollbackApk(pkgName: String): Boolean = installer.hasRollbackApk(pkgName)
+
+    fun rollbackExtension(pkgName: String): Boolean = installer.installRollbackApk(pkgName)
 
     fun setInstallationResult(pkgName: String, result: Boolean) {
         installer.setInstallationResult(pkgName, result)

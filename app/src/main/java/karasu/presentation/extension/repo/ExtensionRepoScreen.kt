@@ -1,6 +1,7 @@
 package karasu.presentation.extension.repo
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -11,6 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +62,8 @@ class ExtensionRepoScreen(
         val state by screenModel.state.collectAsState()
 
         var inputText by remember { mutableStateOf("") }
+        var mirrorRepo by remember { mutableStateOf<ExtensionRepo?>(null) }
+        var mirrorText by remember { mutableStateOf("") }
         val listState = rememberLazyListState()
 
         KarasuScaffold(
@@ -115,12 +119,52 @@ class ExtensionRepoScreen(
                     item {
                         ExtensionRepoItem(
                             extensionRepo = repo,
+                            onMirrorsClick = {
+                                mirrorRepo = it
+                                mirrorText = screenModel.repoMirrors(it.baseUrl).joinToString("\n")
+                            },
                             onDeleteClick = { repoToDelete ->
                                 scope.launch { alertDialog.awaitExtensionRepoDeletePrompt(repoToDelete, screenModel) }
                             },
                         )
                     }
                 }
+            }
+
+            mirrorRepo?.let { repo ->
+                AlertDialog(
+                    onDismissRequest = { mirrorRepo = null },
+                    title = { Text(text = stringResource(MR.strings.extension_repo_mirrors_title)) },
+                    text = {
+                        Column {
+                            Text(text = stringResource(MR.strings.extension_repo_mirrors_summary))
+                            TextField(
+                                value = mirrorText,
+                                onValueChange = { mirrorText = it },
+                                minLines = 3,
+                                maxLines = 6,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                if (screenModel.saveRepoMirrors(repo.baseUrl, mirrorText)) {
+                                    mirrorRepo = null
+                                } else {
+                                    context.toast(MR.strings.extension_repo_mirror_invalid)
+                                }
+                            },
+                        ) {
+                            Text(text = stringResource(AR.string.ok))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { mirrorRepo = null }) {
+                            Text(text = stringResource(AR.string.cancel))
+                        }
+                    },
+                )
             }
 
             alertDialog.value?.invoke()

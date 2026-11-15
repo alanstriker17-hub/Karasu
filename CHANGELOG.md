@@ -10,6 +10,20 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 
 ## [Unreleased]
 
+## [1.13.2]
+
+### Additions
+- Extension details can keep the previously installed APK for rollback, and extension repositories
+  can use configured mirrors when their index is unavailable
+- Extension repository health checks report index response latency
+- Library chapter settings can prefer or block scanlation groups, and categories can suppress
+  reader history and tracker updates for incognito sessions
+- Display refresh-rate settings adapt to supported display modes during interaction
+
+### Changes
+- Extension repositories using Keiyoushi's protobuf index are supported
+- WebView disposal and reader image decoding reduce avoidable memory use
+
 ## [1.13.1]
 
 ### Additions

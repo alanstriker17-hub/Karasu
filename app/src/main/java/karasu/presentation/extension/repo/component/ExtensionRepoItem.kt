@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +24,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextFieldDefaults.indicatorLine
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import dev.icerock.moko.resources.compose.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,6 +44,7 @@ fun ExtensionRepoItem(
     modifier: Modifier = Modifier,
     extensionRepo: ExtensionRepo,
     onDeleteClick: (String) -> Unit = {},
+    onMirrorsClick: (ExtensionRepo) -> Unit = {},
 ) {
     Row(
         modifier = modifier.padding(16.dp),
@@ -72,6 +75,13 @@ fun ExtensionRepoItem(
                 text = extensionRepo.baseUrl,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 16.sp,
+            )
+        }
+        IconButton(onClick = { onMirrorsClick(extensionRepo) }) {
+            Icon(
+                imageVector = Icons.Outlined.Edit,
+                contentDescription = stringResource(karasu.i18n.MR.strings.extension_repo_mirrors),
+                tint = MaterialTheme.colorScheme.onBackground,
             )
         }
         IconButton(onClick = { onDeleteClick(extensionRepo.baseUrl) }) {

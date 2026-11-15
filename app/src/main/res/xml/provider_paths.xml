@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <files-path name="extension_rollback" path="extension_rollback/"/>
     <cache-path name="cache_files" path="."/>
     <external-path name="ext_files" path="." />
     <external-cache-path name="ext_cache_files" path="."/>

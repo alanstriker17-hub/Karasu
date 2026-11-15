@@ -193,6 +193,7 @@ class ReaderViewModel(
     private var chapterItems = emptyList<ReaderChapterItem>()
 
     private var hasTrackers: Boolean = false
+    private var autoIncognitoSession = false
     private suspend fun checkTrackers(manga: Manga) = getTrack.awaitAllByMangaId(manga.id).isNotEmpty()
 
     init {
@@ -244,6 +245,9 @@ class ReaderViewModel(
                 val manga = getManga.awaitById(mangaId)
                 if (manga != null) {
                     mutableState.update { it.copy(manga = manga) }
+                    val autoIncognitoCategories = libraryPreferences.autoIncognitoCategories().get()
+                    autoIncognitoSession = getCategories.awaitByMangaId(manga.id!!)
+                        .any { category -> category.id?.toString()?.let(autoIncognitoCategories::contains) == true }
                     if (chapterId == -1L) {
                         chapterId = initialChapterId
                     }
@@ -288,7 +292,9 @@ class ReaderViewModel(
         val chaptersForReader =
             chapterFilter.filterChaptersForReader(dbChapters, manga, selectedChapter)
         val chapterSort = ChapterSort(manga, chapterFilter, preferences)
-        return chaptersForReader.sortedWith(chapterSort.sortComparator(true)).map(::ReaderChapter)
+        return chapterSort
+            .prioritizePreferredScanlators(chaptersForReader.sortedWith(chapterSort.sortComparator(true)))
+            .map(::ReaderChapter)
     }
 
     suspend fun getChapters(): List<ReaderChapterItem> {
@@ -688,9 +694,10 @@ class ReaderViewModel(
 
     private suspend fun getNextUnreadChaptersSorted(nextChapterId: Long?): List<ChapterItem> {
         val chapterSort = ChapterSort(manga!!, chapterFilter, preferences)
-        return chapterList.map { ChapterItem(it.chapter, manga!!) }
+        val sorted = chapterList.map { ChapterItem(it.chapter, manga!!) }
             .filter { !it.read || it.id == nextChapterId }
             .sortedWith(chapterSort.sortComparator(true))
+        return chapterSort.prioritizePreferredScanlators(sorted)
             .takeLastWhile { it.id != nextChapterId }
     }
 
@@ -786,7 +793,7 @@ class ReaderViewModel(
     }
 
     private fun savePageOffset(chapterId: Long) {
-        if (preferences.incognitoMode().get()) return
+        if (autoIncognitoSession || preferences.incognitoMode().get()) return
         val (id, fraction) = pageOffset ?: return
         pageOffsets.set(chapterId, if (id == chapterId) fraction else 0f)
     }
@@ -797,7 +804,7 @@ class ReaderViewModel(
             readerChapter.chapter.bookmark = dbChapter.bookmark
         }
 
-        val shouldTrack = !preferences.incognitoMode().get() || hasTrackers
+        val shouldTrack = !autoIncognitoSession && (!preferences.incognitoMode().get() || hasTrackers)
         if (shouldTrack && page.status !is Page.State.Error) {
             readerChapter.chapter.last_page_read = page.index
             readerChapter.chapter.pages_left = (readerChapter.pages?.size ?: page.index) - page.index
@@ -823,6 +830,7 @@ class ReaderViewModel(
     }
 
     private suspend fun onChapterReadComplete(readerChapter: ReaderChapter) {
+        if (autoIncognitoSession) return
         readerChapter.chapter.read = true
         updateTrackChapterAfterReading(readerChapter)
         deleteChapterIfNeeded(readerChapter)
@@ -867,7 +875,10 @@ class ReaderViewModel(
      * Saves this [readerChapter] last read history.
      */
     private suspend fun saveChapterHistory(readerChapter: ReaderChapter) {
-        if (preferences.incognitoMode().get()) return
+        if (autoIncognitoSession || preferences.incognitoMode().get()) {
+            chapterReadStartTime = null
+            return
+        }
 
         val endTime = Date().time
         val sessionReadDuration = chapterReadStartTime?.let { endTime - it } ?: 0
@@ -1197,7 +1208,7 @@ class ReaderViewModel(
      * will run in a background thread and errors are ignored.
      */
     private fun updateTrackChapterAfterReading(readerChapter: ReaderChapter) {
-        if (!preferences.autoUpdateTrack().get()) return
+        if (autoIncognitoSession || !preferences.autoUpdateTrack().get()) return
 
         launchIO {
             val newChapterRead = readerChapter.chapter.chapter_number

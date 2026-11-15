@@ -19,7 +19,7 @@ A free and open source manga reader
 
 [![Discord: Mihon](https://img.shields.io/discord/1195734228319617024.svg?label=&labelColor=6A7EC2&color=7389D8&logo=discord&logoColor=FFFFFF)](https://discord.gg/mihon)
 
-[![CI](https://github.com/clevim/Karasu/actions/workflows/build_push.yml/badge.svg?labelColor=27303D)](https://github.com/clevim/Karasu/actions/workflows/build_push.yml)
+[![CI](https://github.com/alanstriker17-hub/Karasu/actions/workflows/build-redmi-apk.yml/badge.svg?labelColor=27303D)](https://github.com/alanstriker17-hub/Karasu/actions/workflows/build-redmi-apk.yml)
 [![License: Apache-2.0](https://img.shields.io/github/license/clevim/Karasu?labelColor=27303D&color=0877d2)](/LICENSE)
 
 <img src="./.github/readme-images/screens.gif" alt="Karasu screenshots" />

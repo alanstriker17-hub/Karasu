@@ -157,7 +157,7 @@ fun domainModule() = module {
     single<ChapterRepository> { ChapterRepositoryImpl(get()) }
     factory { DeleteChapter(get()) }
     factory { GetAvailableScanlators(get()) }
-    factory { GetChapter(get(), get(), get(), get()) }
+    factory { GetChapter(get(), get(), get(), get(), get()) }
     factory { InsertChapter(get()) }
     factory { UpdateChapter(get()) }
 

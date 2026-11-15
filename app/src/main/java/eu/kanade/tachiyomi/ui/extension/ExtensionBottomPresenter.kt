@@ -67,6 +67,14 @@ class ExtensionBottomPresenter : BaseMigrationPresenter<ExtensionBottomSheet>() 
             listOf(migrationJob, extensionJob).awaitAll()
         }
         presenterScope.launch {
+            extensionManager.repoHealthFlow.collect { health ->
+                withUIContext { view?.setRepoHealth(health) }
+            }
+        }
+        presenterScope.launch {
+            extensionManager.refreshRepoHealth()
+        }
+        presenterScope.launch {
             extensionManager.downloadSharedFlow
                 .collect {
                     if (it.first.startsWith("Finished") || it.first.startsWith("Uninstalled")) {

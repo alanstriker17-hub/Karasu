@@ -114,6 +114,7 @@ import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.chapter.ChapterUtil.Companion.preferredChapterName
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.DeviceUtil
+import eu.kanade.tachiyomi.util.system.DisplayRefreshRateController
 import eu.kanade.tachiyomi.util.system.DeviceUtil.LegacyCutoutMode
 import eu.kanade.tachiyomi.util.system.ThemeUtil
 import eu.kanade.tachiyomi.util.system.contextCompatColor
@@ -269,6 +270,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
     private val readerPreferences: ReaderPreferences by injectLazy()
     private val basePreferences: BasePreferences by injectLazy()
+    private val displayRefreshRateController by lazy { DisplayRefreshRateController(window) }
 
     companion object {
 
@@ -517,6 +519,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
+        displayRefreshRateController.close()
         super.onDestroy()
         viewer?.destroy()
         binding.chaptersSheet.chaptersBottomSheet.adapter = null
@@ -1341,13 +1344,22 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     override fun onPause() {
+        displayRefreshRateController.onPause()
         viewModel.flushReadTimer()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        displayRefreshRateController.onResume(basePreferences.displayRefreshRate().get())
         viewModel.restartReadTimer()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN || ev.action == MotionEvent.ACTION_MOVE) {
+            displayRefreshRateController.onInteraction()
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     fun reloadChapters(doublePages: Boolean, force: Boolean = false) {

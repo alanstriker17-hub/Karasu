@@ -29,6 +29,14 @@
         android:visibility="gone" />
 
     <eu.kanade.tachiyomi.ui.reader.viewer.ReaderButton
+        android:id="@+id/action_reset_session"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:text="@string/reset_session"
+        android:visibility="gone" />
+
+    <eu.kanade.tachiyomi.ui.reader.viewer.ReaderButton
         android:id="@+id/action_open_in_web_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

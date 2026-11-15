@@ -165,6 +165,8 @@ class CloudflareInterceptor(
 
             webview?.run {
                 stopLoading()
+                clearHistory()
+                removeAllViews()
                 destroy()
             }
         }

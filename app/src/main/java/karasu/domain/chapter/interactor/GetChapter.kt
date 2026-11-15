@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.SourceManager
 import karasu.domain.chapter.ChapterRepository
+import karasu.domain.library.LibraryPreferences
 import karasu.domain.manga.interactor.GetManga
 import karasu.domain.manga.merged.interactor.MergedSources
 import kotlin.math.roundToInt
@@ -14,6 +15,7 @@ class GetChapter(
     private val mergedSources: MergedSources,
     private val getManga: GetManga,
     private val sourceManager: SourceManager,
+    private val libraryPreferences: LibraryPreferences,
 ) {
     /**
      * Chapters belonging to [mangaId] itself, never merged.
@@ -36,9 +38,16 @@ class GetChapter(
         .toSet()
 
     suspend fun awaitAll(mangaId: Long, filterScanlators: Boolean): List<Chapter> {
-        val own = chapterRepository.getChapters(mangaId, filterScanlators).distinctChapters()
+        val own = chapterRepository.getChapters(mangaId, filterScanlators)
+            .distinctChapters()
+            .withoutBlockedScanlators()
         if (!mergedSources.hasMerges(mangaId)) return own
-        return mergeChapters(own, langOf(mangaId), chaptersFromMergedSources(mangaId, filterScanlators))
+        return mergeChapters(
+            own,
+            langOf(mangaId),
+            chaptersFromMergedSources(mangaId, filterScanlators),
+            libraryPreferences.preferredScanlators().get().normalizeScanlators(),
+        )
     }
 
     suspend fun awaitAll(manga: Manga, filterScanlators: Boolean? = null) =
@@ -50,9 +59,6 @@ class GetChapter(
      * eligible to be the next unread one.
      */
     suspend fun awaitUnread(mangaId: Long, filterScanlators: Boolean): List<Chapter> {
-        if (!mergedSources.hasMerges(mangaId)) {
-            return chapterRepository.getUnread(mangaId, filterScanlators).distinctChapters()
-        }
         return awaitAll(mangaId, filterScanlators).filterNot { it.read }
     }
 
@@ -73,11 +79,16 @@ class GetChapter(
 
     fun subscribeAll(mangaId: Long, filterScanlators: Boolean) =
         chapterRepository.getChaptersAsFlow(mangaId, filterScanlators).map { raw ->
-            val own = raw.distinctChapters()
+            val own = raw.distinctChapters().withoutBlockedScanlators()
             if (!mergedSources.hasMerges(mangaId)) {
                 own
             } else {
-                mergeChapters(own, langOf(mangaId), chaptersFromMergedSources(mangaId, filterScanlators))
+                mergeChapters(
+                    own,
+                    langOf(mangaId),
+                    chaptersFromMergedSources(mangaId, filterScanlators),
+                    libraryPreferences.preferredScanlators().get().normalizeScanlators(),
+                )
             }
         }
 
@@ -91,12 +102,16 @@ class GetChapter(
         MergedChapters(
             priority = merge.priority,
             lang = sourceManager.getOrStub(merge.source).lang,
-            chapters = chapterRepository.getChapters(childId, filterScanlators),
+            chapters = chapterRepository.getChapters(childId, filterScanlators).withoutBlockedScanlators(),
         )
     }
 
     private suspend fun langOf(mangaId: Long): String =
         getManga.awaitById(mangaId)?.let { sourceManager.getOrStub(it.source).lang }.orEmpty()
+
+    private fun List<Chapter>.withoutBlockedScanlators(): List<Chapter> {
+        return filterBlockedScanlators(this, libraryPreferences.blockedScanlators().get())
+    }
 }
 
 /** One merged source's contribution to a manga's reading list. */
@@ -134,9 +149,11 @@ internal fun mergeChapters(
     own: List<Chapter>,
     ownLang: String,
     extra: List<MergedChapters>,
+    preferredScanlators: Set<String> = emptySet(),
 ): List<Chapter> {
     if (extra.isEmpty()) return own
 
+    val preferred = preferredScanlators.normalizeScanlators()
     val ranked = own.map { Ranked(OWN_PRIORITY, ownLang, it) } +
         extra.flatMap { merged -> merged.chapters.map { Ranked(merged.priority, merged.lang, it) } }
 
@@ -145,7 +162,10 @@ internal fun mergeChapters(
     val merged = numbered
         .groupBy { it.chapter.numberKey() }
         .map { (_, group) ->
-            val ordered = group.sortedBy { it.priority }
+            val ordered = group.sortedWith(
+                compareBy<Ranked> { if (it.chapter.scanlator.scanlatorNames().any(preferred::contains)) 0 else 1 }
+                    .thenBy { it.priority },
+            )
             // One entry per language: two sources in the same language are the same read, and
             // offering to pick between them would be a choice about nothing.
             val languages = ordered.distinctBy { it.lang }.map { it.chapter }
@@ -211,6 +231,22 @@ private fun Chapter.duplicateKey() =
     Triple(name.trim().lowercase(), scanlator?.trim()?.lowercase().orEmpty(), chapterNumberKey(chapter_number))
 
 private data class Ranked(val priority: Int, val lang: String, val chapter: Chapter)
+
+private fun Set<String>.normalizeScanlators(): Set<String> = map { it.trim().lowercase() }
+    .filter(String::isNotBlank)
+    .toSet()
+
+internal fun filterBlockedScanlators(chapters: List<Chapter>, blockedScanlators: Set<String>): List<Chapter> {
+    val blocked = blockedScanlators.normalizeScanlators()
+    if (blocked.isEmpty()) return chapters
+    return chapters.filterNot { chapter -> chapter.scanlator.scanlatorNames().any(blocked::contains) }
+}
+
+private fun String?.scanlatorNames(): Set<String> = orEmpty()
+    .split('&', ',', '/', '+', '|')
+    .map { it.trim().lowercase() }
+    .filter(String::isNotBlank)
+    .toSet()
 
 /**
  * [this] with the row that stands for [chapterId] replaced by that chapter itself.

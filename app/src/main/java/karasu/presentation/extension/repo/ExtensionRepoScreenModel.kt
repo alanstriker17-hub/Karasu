@@ -20,11 +20,14 @@ import karasu.domain.extension.repo.interactor.GetExtensionRepo
 import karasu.domain.extension.repo.interactor.ReplaceExtensionRepo
 import karasu.domain.extension.repo.interactor.UpdateExtensionRepo
 import karasu.domain.extension.repo.model.ExtensionRepo
+import karasu.domain.base.BasePreferences
 import karasu.i18n.MR
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class ExtensionRepoScreenModel : StateScreenModel<ExtensionRepoScreenModel.State>(State.Loading) {
 
     private val extensionManager: ExtensionManager by injectLazy()
+    private val basePreferences: BasePreferences by injectLazy()
 
     private val getExtensionRepo: GetExtensionRepo by injectLazy()
     private val createExtensionRepo: CreateExtensionRepo by injectLazy()
@@ -81,6 +84,28 @@ class ExtensionRepoScreenModel : StateScreenModel<ExtensionRepoScreenModel.State
                 updateExtensionRepo.awaitAll()
             }
         }
+    }
+
+    fun repoMirrors(baseUrl: String): List<String> = basePreferences.extensionRepoMirrorsFor(baseUrl)
+
+    fun saveRepoMirrors(baseUrl: String, input: String): Boolean {
+        val mirrors = input.lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .map { it.removeSuffix("/index.min.json").removeSuffix("/index.pb").trimEnd('/') }
+            .distinct()
+            .toList()
+        val normalized = mirrors.map { mirror ->
+            val url = mirror.toHttpUrlOrNull() ?: return false
+            if (url.scheme != "http" && url.scheme != "https") return false
+            url.toString().trimEnd('/')
+        }
+        val primary = baseUrl.trim().trimEnd('/')
+        if (normalized.any { it == primary }) return false
+
+        basePreferences.setExtensionRepoMirrors(baseUrl, normalized)
+        screenModelScope.launchIO { extensionManager.findAvailableExtensions() }
+        return true
     }
 
     fun deleteRepo(url: String) {

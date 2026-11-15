@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.loader
 import co.touchlab.kermit.Logger
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.MergedSourceFallback
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.model.Page
@@ -272,6 +273,10 @@ class HttpPageLoader(
                 throw e
             } catch (e: Throwable) {
                 Logger.w(e) { "Page ${page.number} failed on ${activeSource.name}" }
+                page.httpErrorCode = generateSequence(e) { it.cause }
+                    .filterIsInstance<HttpException>()
+                    .firstOrNull()
+                    ?.code
                 if (!switchSource()) {
                     page.status = Page.State.Error
                     return
@@ -294,6 +299,7 @@ class HttpPageLoader(
         }
 
         page.stream = { chapterCache.getImageFile(imageUrl).inputStream() }
+        page.httpErrorCode = null
         page.status = Page.State.Ready
     }
 

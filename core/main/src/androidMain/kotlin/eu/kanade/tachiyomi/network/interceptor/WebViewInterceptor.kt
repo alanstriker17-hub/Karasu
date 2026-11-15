@@ -5,11 +5,10 @@ import android.os.Build
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
-import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
-import eu.kanade.tachiyomi.util.system.toast
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -18,11 +17,14 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import karasu.i18n.MR
+import karasu.util.lang.getString
 
 abstract class WebViewInterceptor(
     private val context: Context,
     private val defaultUserAgentProvider: () -> String,
 ) : Interceptor {
+
+    private val mainExecutor = ContextCompat.getMainExecutor(context.applicationContext)
 
     /**
      * When this is called, it initializes the WebView if it wasn't already. We use this to avoid
@@ -56,8 +58,12 @@ abstract class WebViewInterceptor(
         }
 
         if (!WebViewUtil.supportsWebView(context)) {
-            launchUI {
-                context.toast(MR.strings.webview_is_required, Toast.LENGTH_LONG)
+            mainExecutor.execute {
+                Toast.makeText(
+                    context.applicationContext,
+                    context.getString(MR.strings.webview_is_required),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
             return response
         }
@@ -81,7 +87,7 @@ abstract class WebViewInterceptor(
     }
 
     fun createWebView(request: Request): WebView {
-        return WebView(context).apply {
+        return WebView(context.applicationContext).apply {
             setDefaultSettings()
             // Avoid sending empty User-Agent, Chromium WebView will reset to default if empty
             settings.userAgentString = request.header("User-Agent") ?: defaultUserAgentProvider()

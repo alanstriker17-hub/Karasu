@@ -9,6 +9,12 @@ import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerConfig
 import karasu.i18n.MR
 
 class ReaderPreferences(private val preferenceStore: PreferenceStore) {
+    fun preferredScanlators() = preferenceStore.getStringSet("preferred_scanlators", emptySet())
+
+    fun blockedScanlators() = preferenceStore.getStringSet("blocked_scanlators", emptySet())
+
+    fun autoIncognitoCategories() = preferenceStore.getStringSet("auto_incognito_categories", emptySet())
+
     fun cutoutShort() = preferenceStore.getBoolean("cutout_short", true)
 
     fun pagerCutoutBehavior() = preferenceStore.getEnum(PreferenceKeys.pagerCutoutBehavior, CutoutBehaviour.IGNORE)

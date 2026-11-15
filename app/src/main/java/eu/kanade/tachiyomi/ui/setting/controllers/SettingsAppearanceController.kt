@@ -8,6 +8,7 @@ import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.data.preference.changesIn
+import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.setting.SettingsLegacyController
 import eu.kanade.tachiyomi.ui.setting.ThemePreference
 import eu.kanade.tachiyomi.ui.setting.bindTo
@@ -168,6 +169,26 @@ class SettingsAppearanceController : SettingsLegacyController() {
 
         preferenceCategory {
             titleRes = MR.strings.navigation
+
+            dropDownPreference {
+                bindTo(basePreferences.displayRefreshRate())
+                titleRes = MR.strings.display_refresh_rate
+
+                val values = BasePreferences.DisplayRefreshRate.entries
+                entries = values.map { context.getString(it.titleResId) }.toTypedArray()
+                entryValues = values.map { it.name }.toTypedArray()
+
+                onChange {
+                    val selectedValue = it as? String
+                    val selectedRate = values.firstOrNull { rate -> rate.name == selectedValue }
+                    if (selectedRate != null) {
+                        (activity as? MainActivity)?.updateDisplayRefreshRate(selectedRate)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
 
             switchPreference {
                 key = Keys.hideBottomNavOnScroll

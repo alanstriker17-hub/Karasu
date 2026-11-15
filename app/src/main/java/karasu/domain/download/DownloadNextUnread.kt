@@ -31,7 +31,10 @@ class DownloadNextUnread(
     suspend fun await(manga: Manga, justRead: Long? = null, autoStart: Boolean = true, toFrontOfQueue: Boolean = false): Boolean {
         val ahead = downloadPreferences.newChaptersAhead().get()
         if (ahead <= 0) return false
-        val chapters = getChapter.awaitAll(manga).sortedWith(ChapterSort(manga).sortComparator(true))
+        val chapterSort = ChapterSort(manga)
+        val chapters = chapterSort.prioritizePreferredScanlators(
+            getChapter.awaitAll(manga).sortedWith(chapterSort.sortComparator(true)),
+        )
         // Only what is on disk or being downloaded right now is in hand. One merely queued — at
         // the back of a long queue, or failed — is handed over again: with [toFrontOfQueue] the
         // downloader moves it forward and retries it, and without it it is left where it is.

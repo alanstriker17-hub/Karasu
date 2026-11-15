@@ -67,6 +67,34 @@ class GetChapterMergeTest {
     }
 
     @Test
+    fun `preferred scanlator wins over source priority for duplicate chapters`() {
+        val own = chapters("a", 5..5).onEach { it.scanlator = "Other Group" }
+        val other = chapters("b", 5..5).onEach { it.scanlator = "Preferred Group" }
+
+        val merged = mergeChapters(
+            own,
+            "en",
+            listOf(MergedChapters(0, "en", other)),
+            preferredScanlators = setOf("preferred group"),
+        )
+
+        assertEquals("b/5", merged.single().url)
+    }
+
+    @Test
+    fun `blocked scanlator matching is case insensitive and handles joint releases`() {
+        val chapters = listOf(
+            chapter("a/1", 1f).apply { scanlator = "Group A & Group B" },
+            chapter("a/2", 2f).apply { scanlator = "Group C" },
+        )
+
+        assertEquals(
+            listOf("a/2"),
+            filterBlockedScanlators(chapters, setOf("group b")).map { it.url },
+        )
+    }
+
+    @Test
     fun `collapses another language into one row that keeps both translations`() {
         val own = chapters("a", 1..3)
         val other = chapters("b", 1..3)

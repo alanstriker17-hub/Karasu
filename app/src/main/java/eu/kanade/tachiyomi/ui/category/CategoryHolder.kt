@@ -16,6 +16,9 @@ import eu.kanade.tachiyomi.databinding.CategoriesItemBinding
 import eu.kanade.tachiyomi.ui.base.holder.BaseFlexibleViewHolder
 import eu.kanade.tachiyomi.ui.category.CategoryPresenter.Companion.CREATE_CATEGORY_ORDER
 import eu.kanade.tachiyomi.util.system.getResourceColor
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import karasu.domain.library.LibraryPreferences
 import java.util.*
 
 /**
@@ -27,6 +30,8 @@ import java.util.*
 class CategoryHolder(view: View, val adapter: CategoryAdapter) : BaseFlexibleViewHolder(view, adapter) {
 
     private val binding = CategoriesItemBinding.bind(view)
+    private val libraryPreferences: LibraryPreferences = Injekt.get()
+
     init {
         binding.editButton.setOnClickListener {
             submitChanges()
@@ -54,6 +59,18 @@ class CategoryHolder(view: View, val adapter: CategoryAdapter) : BaseFlexibleVie
             true
         }
         createCategory = category.order == CREATE_CATEGORY_ORDER
+        val categoryId = category.id?.takeIf { !createCategory }
+        binding.autoIncognito.isVisible = categoryId != null
+        binding.autoIncognito.setOnCheckedChangeListener(null)
+        binding.autoIncognito.tag = categoryId
+        binding.autoIncognito.isChecked =
+            categoryId?.toString()?.let { it in libraryPreferences.autoIncognitoCategories().get() } == true
+        binding.autoIncognito.setOnCheckedChangeListener { _, checked ->
+            val id = binding.autoIncognito.tag as? Int ?: return@setOnCheckedChangeListener
+            val preference = libraryPreferences.autoIncognitoCategories()
+            val categories = preference.get()
+            preference.set(if (checked) categories + id.toString() else categories - id.toString())
+        }
         // The row that creates a category has nothing to hold rules yet.
         binding.rulesButton.isVisible = !createCategory
         if (createCategory) {
@@ -85,6 +102,7 @@ class CategoryHolder(view: View, val adapter: CategoryAdapter) : BaseFlexibleVie
         binding.title.visibility = if (editing) View.INVISIBLE else View.VISIBLE
         binding.editText.visibility = if (!editing) View.INVISIBLE else View.VISIBLE
         binding.rulesButton.isVisible = !editing && !createCategory
+        binding.autoIncognito.isVisible = !editing && binding.autoIncognito.tag is Int
         if (editing) {
             binding.editText.requestFocus()
             binding.editText.selectAll()

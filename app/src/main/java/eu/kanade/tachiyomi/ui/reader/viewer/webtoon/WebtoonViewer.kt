@@ -65,6 +65,8 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
      */
     private var currentPage: Any? = null
 
+    private var displayedChapterId: Long? = null
+
     /**
      * Configuration used by this viewer, like allow taps, or crop image borders.
      */
@@ -195,6 +197,11 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
      */
     private fun onPageSelected(page: ReaderPage, allowPreload: Boolean) {
         val pages = page.chapter.pages ?: return
+        val chapterId = page.chapter.chapter.id
+        if (chapterId != null && displayedChapterId != null && chapterId != displayedChapterId) {
+            trimPageViewCache()
+        }
+        displayedChapterId = chapterId
         Logger.d { "onPageSelected: ${page.number}/${pages.size}" }
         activity.onPageSelected(page, false)
 
@@ -209,6 +216,11 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
                 activity.requestPreloadChapter(transitionChapter)
             }
         }
+    }
+
+    private fun trimPageViewCache() {
+        recycler.setItemViewCacheSize(0)
+        recycler.setItemViewCacheSize(RECYCLER_VIEW_CACHE_SIZE)
     }
 
     /**

@@ -35,4 +35,8 @@ class ExtensionDetailsPresenter(
         val extension = extension ?: return
         extensionManager.uninstallExtension(extension.pkgName)
     }
+
+    fun hasRollbackApk(): Boolean = extensionManager.hasRollbackApk(pkgName)
+
+    fun rollbackExtension(): Boolean = extensionManager.rollbackExtension(pkgName)
 }

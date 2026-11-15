@@ -125,6 +125,19 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/extension_pkg" />
 
+        <Button
+            android:id="@+id/extension_rollback_button"
+            style="@style/Widget.Tachiyomi.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/extension_rollback"
+            android:textAllCaps="false"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/extension_uninstall_button" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
 </LinearLayout>

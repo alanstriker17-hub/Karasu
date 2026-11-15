@@ -554,15 +554,23 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
     private fun clearWebViewData() {
         if (activity == null) return
         try {
-            val webview = WebView(activity!!)
-            webview.setDefaultSettings()
-            webview.clearCache(true)
-            webview.clearFormData()
-            webview.clearHistory()
-            webview.clearSslPreferences()
-            WebStorage.getInstance().deleteAllData()
-            activity?.applicationInfo?.dataDir?.let { File("$it/app_webview/").deleteRecursively() }
-            activity?.toast(MR.strings.webview_data_deleted)
+            val context = activity!!.applicationContext
+            val webview = WebView(context)
+            try {
+                webview.setDefaultSettings()
+                webview.clearCache(true)
+                webview.clearFormData()
+                webview.clearHistory()
+                webview.clearSslPreferences()
+                WebStorage.getInstance().deleteAllData()
+                activity?.applicationInfo?.dataDir?.let { File("$it/app_webview/").deleteRecursively() }
+                activity?.toast(MR.strings.webview_data_deleted)
+            } finally {
+                webview.stopLoading()
+                webview.clearHistory()
+                webview.removeAllViews()
+                webview.destroy()
+            }
         } catch (e: Throwable) {
             Logger.Companion.e(e) { "Unable to delete WebView data" }
             activity?.toast(MR.strings.cache_delete_error)

@@ -234,15 +234,23 @@ object SettingsAdvancedScreen : ComposableSettings() {
 
     private fun Context.clearWebViewData() {
         try {
-            val webview = WebView(this)
-            webview.setDefaultSettings()
-            webview.clearCache(true)
-            webview.clearFormData()
-            webview.clearHistory()
-            webview.clearSslPreferences()
-            WebStorage.getInstance().deleteAllData()
-            applicationInfo?.dataDir?.let { File("$it/app_webview/").deleteRecursively() }
-            toast(MR.strings.webview_data_deleted)
+            val appContext = applicationContext
+            val webview = WebView(appContext)
+            try {
+                webview.setDefaultSettings()
+                webview.clearCache(true)
+                webview.clearFormData()
+                webview.clearHistory()
+                webview.clearSslPreferences()
+                WebStorage.getInstance().deleteAllData()
+                appContext.applicationInfo?.dataDir?.let { File("$it/app_webview/").deleteRecursively() }
+                toast(MR.strings.webview_data_deleted)
+            } finally {
+                webview.stopLoading()
+                webview.clearHistory()
+                webview.removeAllViews()
+                webview.destroy()
+            }
         } catch (e: Throwable) {
             Logger.e(e) { "Unable to delete WebView data" }
             toast(MR.strings.cache_delete_error)

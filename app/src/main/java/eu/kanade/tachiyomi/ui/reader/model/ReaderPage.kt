@@ -29,6 +29,7 @@ open class ReaderPage(
     var longPage: Boolean? = null
     var endPageConfidence: Int? = null
     var startPageConfidence: Int? = null
+    var httpErrorCode: Int? = null
     open lateinit var chapter: ReaderChapter
 
     /** Value to check if a page is too wide to be doubled up */
