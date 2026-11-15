@@ -147,6 +147,9 @@ internal object ExtensionLoader {
             .toList()
     }
 
+    internal fun getExtensionPackageNames(context: Context): List<String> =
+        getExtensionsPackages(context).map { it.packageInfo.packageName }
+
     /**
      * Return a list of all the installed extensions initialized concurrently.
      *
@@ -189,7 +192,12 @@ internal object ExtensionLoader {
 
     private suspend fun loadExtensionSafely(context: Context, extensionInfo: ExtensionInfo): LoadResult =
         try {
-            loadExtension(context, extensionInfo)
+            if (ExtensionCrashGuard.isQuarantined(context, extensionInfo.packageInfo.packageName)) {
+                Logger.w { "Skipping quarantined extension: ${extensionInfo.packageInfo.packageName}" }
+                LoadResult.Error
+            } else {
+                loadExtension(context, extensionInfo)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

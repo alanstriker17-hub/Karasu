@@ -12,10 +12,17 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 
 ### Additions
 - An optional maximum supported refresh-rate setting for displays with high-refresh modes
+- Library grouping by unread count
+- Extension crash quarantine with a restart notice and a concise local crash summary
 
 ### Changes
 - Startup avoids blocking the UI during migrations and extension discovery; update checks wait until
   migration completes and the first frame is shown
+- Image caches are bounded to 15% of the runtime heap and 128 MiB on disk; crash recovery clears the
+  disk cache on the next launch when corruption or an out-of-memory crash is detected
+- Background library updates use a three-request concurrency limit and honor the selected unmetered
+  network constraint
+- Compose strong-skipping mode uses the compiler's enabled-by-default behavior
 - The reader bounds Webtoon chapter prefetching, uses lower-memory decoding where safe, and releases
   image resources when pages are recycled
 - Library cover requests avoid unnecessary full-size bitmap allocations

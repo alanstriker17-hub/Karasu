@@ -193,7 +193,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
     // Boolean to determine if DownloadManager has downloads
     private var hasDownloads = false
 
-    private val requestSemaphore = Semaphore(5)
+    private val requestSemaphore = Semaphore(3)
 
     // For updates delete removed chapters if not preference is set as well
     private val deleteRemoved by lazy { preferences.deleteRemovedChapters().get() != 1 }
@@ -326,7 +326,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         checkIfMassiveUpdate()
         coroutineScope {
             val list = mangaToUpdateMap.keys.map { source ->
-                async {
+                async(sourceUpdateDispatcher) {
                     try {
                         updateMangaInSource(source)
                     } catch (e: Exception) {
@@ -353,7 +353,7 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         // Initialize the variables holding the progress of the updates.
         val count = AtomicInteger(0)
         val asyncList = mangaToUpdate.groupBy { it.manga.source }.values.map { list ->
-            async {
+            async(sourceUpdateDispatcher) {
                 list.forEach { manga ->
                     ensureActive()
                     val source = sourceManager.get(manga.manga.source) as? CatalogueSource ?: return@async
@@ -828,6 +828,8 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
         private const val KEY_CATEGORY = "category"
         const val STARTING_UPDATE_SOURCE = -5L
 
+        private val sourceUpdateDispatcher = Dispatchers.IO.limitedParallelism(3)
+
         /**
          * Key that defines what should be updated.
          */
@@ -854,7 +856,9 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
                 val restrictions = preferences.libraryUpdateDeviceRestriction().get()
 
                 val constraints = Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiredNetworkType(
+                        if (DEVICE_ONLY_ON_WIFI in restrictions) NetworkType.UNMETERED else NetworkType.CONNECTED,
+                    )
                     .setRequiresCharging(DEVICE_CHARGING in restrictions)
                     .setRequiresBatteryNotLow(DEVICE_BATTERY_NOT_LOW in restrictions)
                     .build()

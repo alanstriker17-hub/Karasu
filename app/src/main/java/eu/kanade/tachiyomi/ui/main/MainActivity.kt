@@ -80,6 +80,7 @@ import eu.kanade.tachiyomi.data.updater.AppUpdateResult
 import eu.kanade.tachiyomi.data.updater.RELEASE_URL
 import eu.kanade.tachiyomi.databinding.MainActivityBinding
 import eu.kanade.tachiyomi.extension.ExtensionManager
+import eu.kanade.tachiyomi.extension.util.ExtensionCrashGuard
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.base.MaterialMenuSheet
 import eu.kanade.tachiyomi.ui.base.SmallToolbarInterface
@@ -968,10 +969,24 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     override fun onResume() {
         super.onResume()
         displayRefreshRateController.onResume(basePreferences.displayRefreshRate().get())
+        showPendingExtensionCrashNotice()
         scheduleStartupChecks()
         setExtensionsBadge()
         showDLQueueTutorial()
         reEnableBackPressedCallBack()
+    }
+
+    private fun showPendingExtensionCrashNotice() {
+        val packageName = ExtensionCrashGuard.consumePendingNotice(this) ?: return
+        binding.root.post {
+            if (!isFinishing && !isDestroyed) {
+                Snackbar.make(
+                    binding.root,
+                    getString(MR.strings.extension_quarantined_notice, packageName),
+                    Snackbar.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
 
     private fun showDLQueueTutorial() {

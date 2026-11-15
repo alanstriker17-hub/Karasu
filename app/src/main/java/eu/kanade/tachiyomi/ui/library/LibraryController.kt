@@ -83,6 +83,7 @@ import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_SOURCE
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_STATUS
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_TAG
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_TRACK_STATUS
+import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_UNREAD_COUNT
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.UNGROUPED
 import eu.kanade.tachiyomi.ui.library.calendar.ReleaseCalendarController
 import eu.kanade.tachiyomi.ui.library.display.TabbedLibraryDisplaySheet
@@ -567,7 +568,7 @@ open class LibraryController(
     }
 
     internal fun showGroupOptions() {
-        val groupItems = mutableListOf(BY_DEFAULT, BY_TAG, BY_SOURCE, BY_STATUS, BY_AUTHOR)
+        val groupItems = mutableListOf(BY_DEFAULT, BY_UNREAD_COUNT, BY_TAG, BY_SOURCE, BY_STATUS, BY_AUTHOR)
         if (presenter.isLoggedIntoTracking) {
             groupItems.add(BY_TRACK_STATUS)
         }

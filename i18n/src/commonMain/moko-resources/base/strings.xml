@@ -167,6 +167,8 @@
     <string name="series_type">Series type</string>
     <string name="series">Series</string>
     <string name="group_library_by">Group library by…</string>
+    <string name="group_by_unread_count">Unread count</string>
+    <string name="extension_quarantined_notice">Extension %1$s was disabled after a crash. Update or reinstall it to re-enable.</string>
     <string name="tracking_status">Tracking status</string>
     <string name="ungrouped">Ungrouped</string>
 

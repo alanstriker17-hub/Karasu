@@ -52,6 +52,7 @@ import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.extension.util.ExtensionCrashGuard
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.library.LibraryPresenter
@@ -90,6 +91,9 @@ import karasu.domain.storage.StorageManager
 import karasu.i18n.MR
 import karasu.util.lang.getString
 
+private const val IMAGE_MEMORY_CACHE_HEAP_FRACTION = 0.15
+private const val IMAGE_DISK_CACHE_MAX_SIZE_BYTES = 128L * 1024 * 1024
+
 open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factory, Configuration.Provider {
 
     /**
@@ -110,6 +114,8 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
     @SuppressLint("LaunchActivityFromNotification")
     override fun onCreate() {
         super<Application>.onCreate()
+
+        clearImageCacheAfterCrash()
 
         // TLS 1.3 support for Android 10 and below
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -239,6 +245,17 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
         )
     }
 
+    private fun clearImageCacheAfterCrash() {
+        if (!ExtensionCrashGuard.imageCacheClearRequested(this)) return
+
+        val imageCache = cacheDir.resolve(ExtensionCrashGuard.IMAGE_CACHE_DIRECTORY)
+        if (!imageCache.exists() || imageCache.deleteRecursively()) {
+            ExtensionCrashGuard.clearImageCacheRequest(this)
+        } else {
+            Logger.e { "Unable to clear image cache after a crash" }
+        }
+    }
+
     override fun onPause(owner: LifecycleOwner) {
         if (!AuthenticatorUtil.isAuthenticating && preferences.lockAfter().get() >= 0) {
             SecureActivityDelegate.locked = true
@@ -330,7 +347,9 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
 
             memoryCache(
                 MemoryCache.Builder()
-                    .maxSizePercent(context)
+                    .maxSizeBytes(
+                        (Runtime.getRuntime().maxMemory() * IMAGE_MEMORY_CACHE_HEAP_FRACTION).toLong(),
+                    )
                     .build(),
             )
 
@@ -339,7 +358,8 @@ open class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.F
             // is downloaded again, on the same rate-limited client the source is using.
             diskCache(
                 DiskCache.Builder()
-                    .directory(cacheDir.resolve("image_cache"))
+                    .directory(cacheDir.resolve(ExtensionCrashGuard.IMAGE_CACHE_DIRECTORY))
+                    .maxSizeBytes(IMAGE_DISK_CACHE_MAX_SIZE_BYTES)
                     .build(),
             )
 

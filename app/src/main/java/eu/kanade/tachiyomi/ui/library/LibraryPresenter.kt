@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_LANGUAGE
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_SOURCE
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_TAG
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_TRACK_STATUS
+import eu.kanade.tachiyomi.ui.library.LibraryGroup.BY_UNREAD_COUNT
 import eu.kanade.tachiyomi.ui.library.LibraryGroup.UNGROUPED
 import eu.kanade.tachiyomi.ui.library.filter.FilterBottomSheet
 import eu.kanade.tachiyomi.ui.library.filter.FilterBottomSheet.Companion.STATE_EXCLUDE
@@ -1130,6 +1131,16 @@ class LibraryPresenter(
                         ),
                     )
                 }
+                BY_UNREAD_COUNT -> {
+                    val unreadCount = manga.unread.coerceAtLeast(0)
+                    listOf(
+                        LibraryMangaItem(
+                            manga,
+                            makeOrGetHeader(context.getString(MR.strings._unread, unreadCount)),
+                            viewContext,
+                        ),
+                    )
+                }
                 // BY_STATUS
                 else -> listOf(LibraryMangaItem(manga, makeOrGetHeader(context.mapStatus(manga.manga.status)), viewContext))
             }
@@ -1154,11 +1165,15 @@ class LibraryPresenter(
                 isHidden = getDynamicCategoryName(this) in hiddenDynamics
             }
         }.sortedWith(
-            compareBy(String.CASE_INSENSITIVE_ORDER) {
-                if (groupType == BY_TRACK_STATUS) {
-                    mapTrackingOrder(it.name)
-                } else {
-                    it.name
+            if (groupType == BY_UNREAD_COUNT) {
+                compareBy { it.name.substringBefore(' ').toIntOrNull() ?: Int.MAX_VALUE }
+            } else {
+                compareBy(String.CASE_INSENSITIVE_ORDER) {
+                    if (groupType == BY_TRACK_STATUS) {
+                        mapTrackingOrder(it.name)
+                    } else {
+                        it.name
+                    }
                 }
             },
         ).let { headers ->
