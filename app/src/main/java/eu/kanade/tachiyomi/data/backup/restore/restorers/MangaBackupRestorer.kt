@@ -16,7 +16,6 @@ import eu.kanade.tachiyomi.domain.manga.models.Manga
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.util.chapter.ChapterUtil
 import eu.kanade.tachiyomi.util.manga.MangaUtil
-import eu.kanade.tachiyomi.util.system.launchNow
 import kotlin.math.max
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -35,6 +34,7 @@ import karasu.domain.manga.interactor.UpdateManga
 import karasu.domain.manga.merged.interactor.MergedSources
 import karasu.domain.track.interactor.GetTrack
 import karasu.domain.track.interactor.InsertTrack
+import kotlinx.coroutines.CancellationException
 
 class MangaBackupRestorer(
     private val customMangaManager: CustomMangaManager = Injekt.get(),
@@ -89,6 +89,8 @@ class MangaBackupRestorer(
             val extra = backupManga.extras?.let(extrasStore::decode)
             val id = manga.id
             if (extra != null && id != null && extrasStore.get(id) == null) extrasStore.putAll(mapOf(id to extra))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             onError(manga, e)
         }
@@ -165,9 +167,10 @@ class MangaBackupRestorer(
         // Unmerged: chapters are matched by url below and have their ids copied over, so a
         // merged list could hand this manga an id belonging to another source's manga row.
         val dbChapters = getChapter.awaitAllRaw(manga.id!!, manga.filtered_scanlators?.isNotEmpty() == true)
+        val dbChaptersByUrl = dbChapters.associateBy { it.url }
 
         chapters.forEach { chapter ->
-            val dbChapter = dbChapters.find { it.url == chapter.url }
+            val dbChapter = dbChaptersByUrl[chapter.url]
             if (dbChapter != null) {
                 chapter.id = dbChapter.id
                 chapter.copyFrom(dbChapter as SChapter)
@@ -205,9 +208,7 @@ class MangaBackupRestorer(
         restoreFilteredScanlatorsForManga(manga, filteredScanlators)
         customManga?.let {
             it.mangaId = manga.id!!
-            launchNow {
-                customMangaManager.saveMangaInfo(it)
-            }
+            customMangaManager.saveMangaInfo(it)
         }
     }
 

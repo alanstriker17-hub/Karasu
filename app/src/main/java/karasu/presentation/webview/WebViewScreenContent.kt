@@ -3,7 +3,6 @@ package karasu.presentation.webview
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Message
-import android.view.ViewGroup
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.WebResourceRequest
@@ -53,6 +52,7 @@ import com.kevinnzou.web.WebViewState
 import dev.icerock.moko.resources.compose.stringResource
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.util.system.destroyAndDetach
 import eu.kanade.tachiyomi.util.system.extensionIntentForText
 import eu.kanade.tachiyomi.util.system.getHtml
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
@@ -405,12 +405,4 @@ fun WebViewScreenContent(
             )
         }
     }
-}
-
-private fun WebView.destroyAndDetach() {
-    (parent as? ViewGroup)?.removeView(this)
-    stopLoading()
-    clearHistory()
-    removeAllViews()
-    destroy()
 }

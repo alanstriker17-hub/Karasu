@@ -17,11 +17,13 @@ import eu.kanade.tachiyomi.extension.util.ExtensionInstaller
 import eu.kanade.tachiyomi.extension.util.ExtensionLoader
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.extension.ExtensionIntallInfo
+import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchNow
 import eu.kanade.tachiyomi.util.system.withIOContext
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
@@ -114,24 +116,38 @@ class ExtensionManager(
     private val _untrustedExtensionsFlow = MutableStateFlow(emptyList<Extension.Untrusted>())
     val untrustedExtensionsFlow = _untrustedExtensionsFlow.asStateFlow()
 
+    private val extensionStateLock = Any()
+    private var extensionStateVersion = 0L
+
     init {
-        initExtensions()
         ExtensionInstallReceiver(InstallationListener()).register(context)
+        initExtensions()
     }
 
     /**
      * Loads and registers the installed extensions.
      */
     private fun initExtensions() {
-        val extensions = ExtensionLoader.loadExtensions(context)
-
-        _installedExtensionsFlow.value = extensions
-            .filterIsInstance<LoadResult.Success>()
-            .map { it.extension }
-
-        _untrustedExtensionsFlow.value = extensions
-            .filterIsInstance<LoadResult.Untrusted>()
-            .map { it.extension }
+        launchIO {
+            val version = synchronized(extensionStateLock) { extensionStateVersion }
+            try {
+                val extensions = ExtensionLoader.loadExtensionAsync(context)
+                synchronized(extensionStateLock) {
+                    if (version == extensionStateVersion) {
+                        _installedExtensionsFlow.value = extensions
+                            .filterIsInstance<LoadResult.Success>()
+                            .map { it.extension }
+                        _untrustedExtensionsFlow.value = extensions
+                            .filterIsInstance<LoadResult.Untrusted>()
+                            .map { it.extension }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.e(e) { "Failed to initialize installed extensions" }
+            }
+        }
     }
 
     fun isInstalledByApp(extension: Extension.Available): Boolean {
@@ -229,26 +245,29 @@ class ExtensionManager(
             preferences.extensionUpdatesCount().set(0)
             return
         }
-        val mutInstalledExtensions = installedExtensionsFlow.value.toMutableList()
-        var changed = false
-        for ((index, installedExt) in mutInstalledExtensions.withIndex()) {
-            val availableExt = availableExtensions.find { it.pkgName == installedExt.pkgName }
-            val updated = installedExt.copy(
-                hasUpdate = availableExt != null && installedExt.updateExists(availableExt),
-                // Obsolete means "the repo no longer lists it", so it has to clear again once the
-                // repo does. Writing it in one copy with the rest is what makes that stick: the
-                // update pass used to overwrite the flag with the old value right after setting it,
-                // leaving working extensions marked obsolete forever.
-                isObsolete = availableExt == null,
-                repoUrl = availableExt?.repoUrl ?: installedExt.repoUrl,
-            )
-            if (updated != installedExt) {
-                mutInstalledExtensions[index] = updated
-                changed = true
+        synchronized(extensionStateLock) {
+            val mutInstalledExtensions = installedExtensionsFlow.value.toMutableList()
+            var changed = false
+            for ((index, installedExt) in mutInstalledExtensions.withIndex()) {
+                val availableExt = availableExtensions.find { it.pkgName == installedExt.pkgName }
+                val updated = installedExt.copy(
+                    hasUpdate = availableExt != null && installedExt.updateExists(availableExt),
+                    // Obsolete means "the repo no longer lists it", so it has to clear again once the
+                    // repo does. Writing it in one copy with the rest is what makes that stick: the
+                    // update pass used to overwrite the flag with the old value right after setting it,
+                    // leaving working extensions marked obsolete forever.
+                    isObsolete = availableExt == null,
+                    repoUrl = availableExt?.repoUrl ?: installedExt.repoUrl,
+                )
+                if (updated != installedExt) {
+                    mutInstalledExtensions[index] = updated
+                    changed = true
+                }
             }
-        }
-        if (changed) {
-            _installedExtensionsFlow.value = mutInstalledExtensions
+            if (changed) {
+                extensionStateVersion++
+                _installedExtensionsFlow.value = mutInstalledExtensions
+            }
         }
         preferences.extensionUpdatesCount().set(installedExtensionsFlow.value.count { it.hasUpdate })
     }
@@ -345,7 +364,7 @@ class ExtensionManager(
     suspend fun refreshTrust() {
         val nowTrustedExtensions = untrustedExtensionsFlow.value
             .filter { trustExtension.isTrustedByRepo(listOf(it.signatureHash)) }
-        _untrustedExtensionsFlow.value -= nowTrustedExtensions
+        removeUntrustedExtensions(nowTrustedExtensions)
 
         registerNewTrusted(nowTrustedExtensions)
     }
@@ -366,9 +385,19 @@ class ExtensionManager(
 
         val nowTrustedExtensions = untrustedExtensionsFlow.value
             .filter { it.pkgName == pkgName && it.versionCode == versionCode }
-        _untrustedExtensionsFlow.value -= nowTrustedExtensions
+        removeUntrustedExtensions(nowTrustedExtensions)
 
         registerNewTrusted(nowTrustedExtensions)
+    }
+
+    private fun removeUntrustedExtensions(extensions: List<Extension.Untrusted>) {
+        if (extensions.isEmpty()) return
+        val packageNames = extensions.mapTo(mutableSetOf()) { it.pkgName }
+        synchronized(extensionStateLock) {
+            extensionStateVersion++
+            _untrustedExtensionsFlow.value = _untrustedExtensionsFlow.value
+                .filterNot { it.pkgName in packageNames }
+        }
     }
 
     private suspend fun registerNewTrusted(nowTrustedExtensions: List<Extension.Untrusted>) {
@@ -388,7 +417,10 @@ class ExtensionManager(
      * @param extension The extension to be registered.
      */
     private fun registerNewExtension(extension: Extension.Installed) {
-        _installedExtensionsFlow.value += extension
+        synchronized(extensionStateLock) {
+            extensionStateVersion++
+            _installedExtensionsFlow.value += extension
+        }
         emitToInstaller(
             "Finished/${extension.pkgName}",
             ExtensionIntallInfo(InstallStep.Installed, null),
@@ -402,13 +434,16 @@ class ExtensionManager(
      * @param extension The extension to be registered.
      */
     private fun registerUpdatedExtension(extension: Extension.Installed) {
-        val mutInstalledExtensions = _installedExtensionsFlow.value.toMutableList()
-        val oldExtension = mutInstalledExtensions.find { it.pkgName == extension.pkgName }
-        if (oldExtension != null) {
-            mutInstalledExtensions -= oldExtension
+        synchronized(extensionStateLock) {
+            extensionStateVersion++
+            val mutInstalledExtensions = _installedExtensionsFlow.value.toMutableList()
+            val oldExtension = mutInstalledExtensions.find { it.pkgName == extension.pkgName }
+            if (oldExtension != null) {
+                mutInstalledExtensions -= oldExtension
+            }
+            mutInstalledExtensions += extension
+            _installedExtensionsFlow.value = mutInstalledExtensions
         }
-        mutInstalledExtensions += extension
-        _installedExtensionsFlow.value = mutInstalledExtensions
         emitToInstaller(
             "Finished/${extension.pkgName}",
             ExtensionIntallInfo(InstallStep.Installed, null),
@@ -425,16 +460,32 @@ class ExtensionManager(
      * @param pkgName The package name of the uninstalled application.
      */
     private fun unregisterExtension(pkgName: String) {
-        val installedExtension = installedExtensionsFlow.value.find { it.pkgName == pkgName }
-        if (installedExtension != null) {
-            _installedExtensionsFlow.value -= installedExtension
-        }
-        val untrustedExtension = untrustedExtensionsFlow.value.find { it.pkgName == pkgName }
-        if (untrustedExtension != null) {
-            _untrustedExtensionsFlow.value -= untrustedExtension
+        synchronized(extensionStateLock) {
+            extensionStateVersion++
+            val installedExtension = installedExtensionsFlow.value.find { it.pkgName == pkgName }
+            if (installedExtension != null) {
+                _installedExtensionsFlow.value -= installedExtension
+            }
+            val untrustedExtension = untrustedExtensionsFlow.value.find { it.pkgName == pkgName }
+            if (untrustedExtension != null) {
+                _untrustedExtensionsFlow.value -= untrustedExtension
+            }
         }
         installer.emitToFlow("Uninstalled/$pkgName", ExtensionIntallInfo(InstallStep.Done, null))
     }
+
+    private fun registerUntrustedExtension(extension: Extension.Untrusted): Boolean =
+        synchronized(extensionStateLock) {
+            extensionStateVersion++
+            val installedExtension = installedExtensionsFlow.value
+                .find { it.pkgName == extension.pkgName }
+            if (installedExtension != null) {
+                _installedExtensionsFlow.value -= installedExtension
+            } else {
+                _untrustedExtensionsFlow.value += extension
+            }
+            installedExtension != null
+        }
 
     /**
      * Listener which receives events of the extensions being installed, updated or removed.
@@ -452,14 +503,8 @@ class ExtensionManager(
         }
 
         override fun onExtensionUntrusted(extension: Extension.Untrusted) {
-            val installedExtension = installedExtensionsFlow.value
-                .find { it.pkgName == extension.pkgName }
-
-            if (installedExtension != null) {
-                _installedExtensionsFlow.value -= installedExtension
+            if (registerUntrustedExtension(extension)) {
                 preferences.extensionUpdatesCount().set(installedExtensionsFlow.value.count { it.hasUpdate })
-            } else {
-                _untrustedExtensionsFlow.value += extension
             }
         }
 

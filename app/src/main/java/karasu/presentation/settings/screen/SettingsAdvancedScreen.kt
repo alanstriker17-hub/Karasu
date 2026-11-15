@@ -47,6 +47,7 @@ import eu.kanade.tachiyomi.util.compose.currentOrThrow
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.localeContext
+import eu.kanade.tachiyomi.util.system.destroyAndDetach
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import eu.kanade.tachiyomi.util.system.toast
@@ -247,10 +248,7 @@ object SettingsAdvancedScreen : ComposableSettings() {
                 appContext.applicationInfo?.dataDir?.let { File("$it/app_webview/").deleteRecursively() }
                 toast(MR.strings.webview_data_deleted)
             } finally {
-                webview.stopLoading()
-                webview.clearHistory()
-                webview.removeAllViews()
-                webview.destroy()
+                webview.destroyAndDetach()
             }
         } catch (e: Throwable) {
             Logger.e(e) { "Unable to delete WebView data" }
@@ -427,13 +425,6 @@ object SettingsAdvancedScreen : ComposableSettings() {
                 subtitle = stringResource(MR.strings.updates_tracking_details),
                 onClick = { LibraryUpdateJob.startNow(context, target = LibraryUpdateJob.Target.TRACKING) },
             ))
-            if (BuildConfig.FLAVOR == "dev" || BuildConfig.DEBUG) {
-                add(Preference.PreferenceItem.SwitchPreference(
-                    pref = basePreferences.composeLibrary(),
-                    title = stringResource(MR.strings.pref_use_compose_library),
-                    // FIXME: Add beta tag support to preference item
-                ))
-            }
         }.toPersistentList()
 
         return Preference.PreferenceGroup(

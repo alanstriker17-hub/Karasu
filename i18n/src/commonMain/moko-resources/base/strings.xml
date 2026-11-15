@@ -1084,6 +1084,7 @@
     <string name="display_refresh_rate_adaptive">Adaptive</string>
     <string name="display_refresh_rate_90">Lock to 90 Hz</string>
     <string name="display_refresh_rate_120">Lock to 120 Hz</string>
+    <string name="display_refresh_rate_maximum">Maximum supported refresh rate</string>
     <string name="advanced">Advanced</string>
     <string name="about">About</string>
     <string name="help">Help</string>

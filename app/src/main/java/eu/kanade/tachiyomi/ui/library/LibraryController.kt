@@ -479,7 +479,9 @@ open class LibraryController(
 
     private fun applyZenMode() {
         if (!isBindingInitialized) return
-        if (zenMode && binding.recyclerCover.isClickable) showCategories(false)
+        if (zenMode && binding.recyclerCover.isClickable && ::elevateAppBar.isInitialized) {
+            showCategories(false)
+        }
         binding.headerCard.isVisible = showCategoryInTitle && !zenMode
         binding.categoryHopperFrame.isVisible =
             !zenMode && !singleCategory && !preferences.hideHopper().get()
@@ -646,8 +648,6 @@ open class LibraryController(
         }
         setupFilterSheet()
         setUpHopper()
-        applyZenMode()
-        setPreferenceFlows()
         LibraryUpdateJob.updateFlow.onEach(::onUpdateManga).launchIn(viewScope)
         viewScope.launchUI {
             LibraryUpdateJob.isRunningFlow(view.context).collect {
@@ -682,6 +682,9 @@ open class LibraryController(
                     updateFilterSheetY()
                 },
             )
+
+        applyZenMode()
+        setPreferenceFlows()
 
         viewScope.launchUI {
             delay(50)

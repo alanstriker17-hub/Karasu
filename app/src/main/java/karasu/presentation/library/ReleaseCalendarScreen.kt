@@ -144,7 +144,7 @@ fun ReleaseCalendarScreen(
         ) {
             // What landed today comes first: "did it come out?" is the question the day starts with.
             if (schedule.arrived.isNotEmpty()) {
-                item {
+                item(key = "arrived_section", contentType = "release_section") {
                     SectionHeader(title = stringResource(MR.strings.release_calendar_arrived))
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -158,11 +158,15 @@ fun ReleaseCalendarScreen(
             }
 
             if (monthView) {
-                item {
+                item(key = "month_grid", contentType = "month_grid") {
                     MonthGrid(month = month, onMangaClick = onMangaClick)
                 }
             } else {
-                items(calendar.days, key = { it.date.toString() }) { day ->
+                items(
+                    calendar.days,
+                    key = { it.date.toString() },
+                    contentType = { "release_day" },
+                ) { day ->
                     DaySection(
                         title = day.date.label(),
                         releases = day.releases,
@@ -172,7 +176,7 @@ fun ReleaseCalendarScreen(
             }
 
             if (calendar.later.isNotEmpty()) {
-                item {
+                item(key = "later_section", contentType = "release_section") {
                     DaySection(
                         title = stringResource(MR.strings.release_calendar_later),
                         releases = calendar.later,
@@ -182,7 +186,7 @@ fun ReleaseCalendarScreen(
             }
 
             if (schedule.onHiatus.isNotEmpty()) {
-                item {
+                item(key = "hiatus_section", contentType = "release_section") {
                     SectionHeader(
                         title = stringResource(MR.strings.release_calendar_hiatus),
                         subtitle = stringResource(MR.strings.release_calendar_hiatus_summary),
@@ -199,7 +203,7 @@ fun ReleaseCalendarScreen(
             }
 
             if (schedule.stalled.isNotEmpty()) {
-                item {
+                item(key = "stalled_section", contentType = "release_section") {
                     DaySection(
                         title = stringResource(MR.strings.release_calendar_stalled),
                         subtitle = stringResource(MR.strings.release_calendar_stalled_summary),
@@ -210,7 +214,7 @@ fun ReleaseCalendarScreen(
             }
 
             if (schedule.unknown.isNotEmpty()) {
-                item {
+                item(key = "unknown_section", contentType = "release_section") {
                     SectionHeader(
                         title = stringResource(MR.strings.release_calendar_unknown),
                         subtitle = stringResource(MR.strings.release_calendar_unknown_summary),

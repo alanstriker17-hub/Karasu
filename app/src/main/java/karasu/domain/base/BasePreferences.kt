@@ -65,6 +65,7 @@ class BasePreferences(private val preferenceStore: PreferenceStore) {
         ADAPTIVE(MR.strings.display_refresh_rate_adaptive),
         LOCK_90(MR.strings.display_refresh_rate_90),
         LOCK_120(MR.strings.display_refresh_rate_120),
+        MAXIMUM(MR.strings.display_refresh_rate_maximum),
     }
 
     fun hasShownOnboarding() = preferenceStore.getBoolean(Preference.appStateKey("onboarding_complete"), false)

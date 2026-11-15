@@ -10,6 +10,26 @@ The format is simplified version of [Keep a Changelog](https://keepachangelog.co
 
 ## [Unreleased]
 
+### Additions
+- An optional maximum supported refresh-rate setting for displays with high-refresh modes
+
+### Changes
+- Startup avoids blocking the UI during migrations and extension discovery; update checks wait until
+  migration completes and the first frame is shown
+- The reader bounds Webtoon chapter prefetching, uses lower-memory decoding where safe, and releases
+  image resources when pages are recycled
+- Library cover requests avoid unnecessary full-size bitmap allocations
+- The library opens its established screen instead of the unfinished Compose screen
+
+### Fixes
+- Opening the library with Zen mode enabled no longer crashes before the app-bar callback is initialized
+- Extension loading isolates malformed or incompatible packages and no longer blocks the startup thread
+- Backup restore matches chapters without repeated scans, honors cancellation, and waits for custom
+  metadata to be saved
+
+### Other
+- Removed full LeakCanary heap analysis from debug builds to avoid its CPU and memory overhead
+
 ## [1.13.2]
 
 ### Additions

@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.util.system.ChildFirstPathClassLoader
 import eu.kanade.tachiyomi.util.system.withIOContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import uy.kohesive.injekt.injectLazy
 import karasu.domain.extension.interactor.TrustExtension
@@ -156,7 +157,7 @@ internal object ExtensionLoader {
         // Load each extension concurrently and wait for completion
         return runBlocking {
             val deferred = extPkgs.map {
-                async { loadExtension(context, it) }
+                async { loadExtensionSafely(context, it) }
             }
             deferred.awaitAll()
         }
@@ -167,7 +168,7 @@ internal object ExtensionLoader {
         // Load each extension concurrently and wait for completion
         return withIOContext {
             val deferred = extPkgs.map {
-                async { loadExtension(context, it) }
+                async { loadExtensionSafely(context, it) }
             }
             deferred.awaitAll()
         }
@@ -183,8 +184,25 @@ internal object ExtensionLoader {
             Logger.e { "Extension package is not found ($pkgName)" }
             return LoadResult.Error
         }
-        return loadExtension(context, extensionPackage)
+        return loadExtensionSafely(context, extensionPackage)
     }
+
+    private suspend fun loadExtensionSafely(context: Context, extensionInfo: ExtensionInfo): LoadResult =
+        try {
+            loadExtension(context, extensionInfo)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.e(e) {
+                "Extension load failed: ${extensionInfo.packageInfo.packageName}"
+            }
+            LoadResult.Error
+        } catch (e: LinkageError) {
+            Logger.e(e) {
+                "Extension class loading failed: ${extensionInfo.packageInfo.packageName}"
+            }
+            LoadResult.Error
+        }
 
     fun getExtensionPackageInfoFromPkgName(context: Context, pkgName: String): PackageInfo? {
         return getExtensionInfoFromPkgName(context, pkgName)?.packageInfo
@@ -280,8 +298,11 @@ internal object ExtensionLoader {
     private suspend fun loadExtension(context: Context, extensionInfo: ExtensionInfo): LoadResult {
         val pkgManager = context.packageManager
         val pkgInfo = extensionInfo.packageInfo
-        val appInfo = pkgInfo.applicationInfo!!
         val pkgName = pkgInfo.packageName
+        val appInfo = pkgInfo.applicationInfo ?: run {
+            Logger.w { "Missing application info for extension $pkgName" }
+            return LoadResult.Error
+        }
         val metaData = appInfo.metaData ?: return LoadResult.Error
 
         val extName = metaData.getString(METADATA_NAME)
@@ -341,7 +362,12 @@ internal object ExtensionLoader {
             return LoadResult.Error
         }
 
-        val sources = metaData.getString(METADATA_SOURCE_CLASS)!!
+        val sourceClassNames = metaData.getString(METADATA_SOURCE_CLASS)
+        if (sourceClassNames.isNullOrBlank()) {
+            Logger.w { "Missing source class metadata for extension $pkgName" }
+            return LoadResult.Error
+        }
+        val sources = sourceClassNames
             .split(";")
             .map {
                 val sourceClass = it.trim()

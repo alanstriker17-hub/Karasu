@@ -26,7 +26,8 @@ fun LibraryContent(
         ) {
             items(
                 items = items,
-                contentType = { "library_grid_item" }
+                key = { it.stableKey() },
+                contentType = { it::class },
             ) { item ->
                 when (item) {
                     is LibraryItem.Blank -> {
@@ -38,6 +39,12 @@ fun LibraryContent(
                     is LibraryItem.Manga -> {
                         Text("Manga: ${item.libraryManga.manga.title}")
                     }
+                }
+
+                private fun LibraryItem.stableKey(): String = when (this) {
+                    is LibraryItem.Blank -> "blank:$mangaCount"
+                    is LibraryItem.Hidden -> "hidden:$title"
+                    is LibraryItem.Manga -> "manga:${libraryManga.manga.id ?: libraryManga.manga.url}"
                 }
             }
         }

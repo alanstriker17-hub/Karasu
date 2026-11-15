@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.network.FlareSolverr
 import eu.kanade.tachiyomi.util.system.WebViewClientCompat
+import eu.kanade.tachiyomi.util.system.destroyAndDetach
 import eu.kanade.tachiyomi.util.system.isOutdated
 import eu.kanade.tachiyomi.util.system.toast
 import java.io.IOException
@@ -164,10 +165,7 @@ class CloudflareInterceptor(
             }
 
             webview?.run {
-                stopLoading()
-                clearHistory()
-                removeAllViews()
-                destroy()
+                destroyAndDetach()
             }
         }
 

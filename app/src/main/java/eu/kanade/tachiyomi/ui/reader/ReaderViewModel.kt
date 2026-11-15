@@ -56,6 +56,7 @@ import eu.kanade.tachiyomi.util.system.withUIContext
 import java.util.Date
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -103,7 +104,6 @@ import karasu.translation.model.Translation
 import karasu.translation.model.TranslationBlock
 import karasu.domain.translation.TranslationPreferences
 
-private const val WEBTOON_PREFETCH_CHAPTERS = 3
 private const val WEBTOON_PREFETCH_TIMEOUT_MS = 15_000L
 
 /**
@@ -186,6 +186,7 @@ class ReaderViewModel(
 
     private var webtoonPrefetchJob: Job? = null
     private var webtoonPrefetchAnchorUrl: String? = null
+    private var webtoonPrefetchedChapter: ReaderChapter? = null
 
     /** The chapter the download-ahead buffer was last topped up for, see [downloadNextChapters]. */
     private val downloadedAheadOf = AtomicReference<Long?>(null)
@@ -457,51 +458,75 @@ class ReaderViewModel(
         return newChapters
     }
 
-    private fun prefetchUpcomingWebtoonChapters(chapter: ReaderChapter) {
-        val manga = manga ?: return
-        if (!ReadingModeType.isWebtoonType(manga.readingModeType)) {
-            webtoonPrefetchJob?.cancel()
-            webtoonPrefetchJob = null
-            webtoonPrefetchAnchorUrl = null
-            return
+    private suspend fun prefetchUpcomingWebtoonChapters(chapter: ReaderChapter) = withUIContext {
+        val manga = manga
+        val chapterLoader = loader
+        if (manga == null || chapterLoader == null || !ReadingModeType.isWebtoonType(manga.readingModeType)) {
+            clearWebtoonPrefetch()
+            return@withUIContext
         }
 
-        val chapterLoader = loader ?: return
         val anchorUrl = chapter.chapter.url
-        if (webtoonPrefetchJob?.isActive == true && webtoonPrefetchAnchorUrl == anchorUrl) return
+        if (webtoonPrefetchAnchorUrl == anchorUrl &&
+            (webtoonPrefetchJob?.isActive == true || webtoonPrefetchedChapter?.state is ReaderChapter.State.Loaded)
+        ) return@withUIContext
 
         val chapterPosition = chapterList.indexOf(chapter)
-        if (chapterPosition < 0) return
-        val upcoming = chapterList
-            .drop(chapterPosition + 1)
-            .take(WEBTOON_PREFETCH_CHAPTERS)
-            .filter { it.state !is ReaderChapter.State.Loaded && it.state != ReaderChapter.State.Loading }
-        webtoonPrefetchJob?.cancel()
-        webtoonPrefetchJob = null
-        webtoonPrefetchAnchorUrl = null
-        if (upcoming.isEmpty()) return
+        if (chapterPosition < 0) {
+            clearWebtoonPrefetch()
+            return@withUIContext
+        }
+        val nextChapter = chapterList.getOrNull(chapterPosition + 1)
+        clearWebtoonPrefetch()
+        if (nextChapter == null ||
+            nextChapter.state is ReaderChapter.State.Loaded ||
+            nextChapter.state == ReaderChapter.State.Loading
+        ) return@withUIContext
 
         webtoonPrefetchAnchorUrl = anchorUrl
+        webtoonPrefetchedChapter = nextChapter.also(ReaderChapter::ref)
         webtoonPrefetchJob = viewModelScope.launchIO {
+            var loaded = false
             try {
-                for (nextChapter in upcoming) {
-                    try {
-                        withTimeout(WEBTOON_PREFETCH_TIMEOUT_MS) {
-                            chapterLoader.loadChapter(nextChapter)
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Logger.w(e) { "Unable to prefetch Webtoon chapter ${nextChapter.chapter.url}" }
-                    }
+                withTimeout(WEBTOON_PREFETCH_TIMEOUT_MS) {
+                    chapterLoader.loadChapter(nextChapter)
                 }
+                loaded = true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w(e) { "Unable to prefetch Webtoon chapter ${nextChapter.chapter.url}" }
             } finally {
-                if (webtoonPrefetchAnchorUrl == anchorUrl) {
-                    webtoonPrefetchJob = null
-                    webtoonPrefetchAnchorUrl = null
+                withContext(NonCancellable) {
+                    withUIContext {
+                        if (webtoonPrefetchedChapter === nextChapter) {
+                            webtoonPrefetchJob = null
+                            if (!loaded) {
+                                webtoonPrefetchAnchorUrl = null
+                                webtoonPrefetchedChapter = null
+                                nextChapter.unref()
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private fun clearWebtoonPrefetch() {
+        webtoonPrefetchJob?.cancel()
+        webtoonPrefetchJob = null
+        webtoonPrefetchAnchorUrl = null
+        webtoonPrefetchedChapter?.let { chapter ->
+            webtoonPrefetchedChapter = null
+            chapter.unref()
+        }
+    }
+
+    override fun onCleared() {
+        clearWebtoonPrefetch()
+        mutableState.value.viewerChapters?.unref()
+        super.onCleared()
     }
 
     /**

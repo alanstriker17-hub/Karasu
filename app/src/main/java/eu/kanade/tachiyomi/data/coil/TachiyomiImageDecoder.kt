@@ -53,6 +53,7 @@ class TachiyomiImageDecoder(private val resources: ImageSource, private val opti
         if (
             options.bitmapConfig == Bitmap.Config.RGB_565 &&
             bitmap.config != Bitmap.Config.RGB_565 &&
+            !bitmap.hasAlpha() &&
             hasMemoryForBitmapConversion(bitmap)
         ) {
             bitmap.copy(Bitmap.Config.RGB_565, false)?.let { converted ->

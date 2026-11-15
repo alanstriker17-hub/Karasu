@@ -61,6 +61,7 @@ import eu.kanade.tachiyomi.util.lang.addBetaTag
 import eu.kanade.tachiyomi.util.system.GLUtil
 import eu.kanade.tachiyomi.util.system.ImageUtil
 import eu.kanade.tachiyomi.util.system.disableItems
+import eu.kanade.tachiyomi.util.system.destroyAndDetach
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchUI
@@ -404,12 +405,6 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
 
                 onClick { LibraryUpdateJob.Companion.startNow(context, target = LibraryUpdateJob.Target.TRACKING) }
             }
-            if (BuildConfig.FLAVOR == "dev" || BuildConfig.DEBUG) {
-                switchPreference {
-                    bindTo(basePreferences.composeLibrary())
-                    title = context.getString(MR.strings.pref_use_compose_library).addBetaTag(context)
-                }
-            }
         }
 
         preferenceCategory {
@@ -566,10 +561,7 @@ class SettingsAdvancedLegacyController : SettingsLegacyController() {
                 activity?.applicationInfo?.dataDir?.let { File("$it/app_webview/").deleteRecursively() }
                 activity?.toast(MR.strings.webview_data_deleted)
             } finally {
-                webview.stopLoading()
-                webview.clearHistory()
-                webview.removeAllViews()
-                webview.destroy()
+                webview.destroyAndDetach()
             }
         } catch (e: Throwable) {
             Logger.Companion.e(e) { "Unable to delete WebView data" }

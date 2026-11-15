@@ -54,7 +54,7 @@ fun BrokenSourcesScreen(
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
+        item(key = "broken_sources_header", contentType = "header") {
             Column {
                 Text(
                     text = stringResource(MR.strings.broken_sources),
@@ -76,7 +76,11 @@ fun BrokenSourcesScreen(
             }
         }
 
-        items(sources, key = { "${it.sourceId}-${it.kind}" }) { source ->
+        items(
+            sources,
+            key = { "${it.sourceId}-${it.kind}" },
+            contentType = { "broken_source" },
+        ) { source ->
             BrokenSourceCard(
                 source = source,
                 onMigrate = { onMigrate(source) },

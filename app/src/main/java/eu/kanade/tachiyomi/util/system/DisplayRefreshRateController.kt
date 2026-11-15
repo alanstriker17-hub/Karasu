@@ -34,6 +34,8 @@ class DisplayRefreshRateController(private val window: Window) {
             BasePreferences.DisplayRefreshRate.ADAPTIVE -> applyMode(selectIdleMode())
             BasePreferences.DisplayRefreshRate.LOCK_90 -> applyMode(selectMode(90f))
             BasePreferences.DisplayRefreshRate.LOCK_120 -> applyMode(selectMode(120f))
+            BasePreferences.DisplayRefreshRate.MAXIMUM ->
+                applyMode(supportedModes().maxByOrNull(Display.Mode::getRefreshRate))
         }
     }
 

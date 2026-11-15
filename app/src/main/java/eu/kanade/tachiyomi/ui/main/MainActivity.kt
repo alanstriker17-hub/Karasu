@@ -51,6 +51,7 @@ import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.DisplayFeature
 import androidx.window.layout.FoldingFeature
@@ -89,7 +90,6 @@ import eu.kanade.tachiyomi.ui.base.controller.DialogController
 import eu.kanade.tachiyomi.ui.library.LibraryController
 import eu.kanade.tachiyomi.ui.library.broken.BrokenSourcesController
 import eu.kanade.tachiyomi.ui.library.calendar.ReleaseCalendarController
-import eu.kanade.tachiyomi.ui.library.compose.LibraryComposeController
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.migration.manga.process.MigrationListController
 import eu.kanade.tachiyomi.ui.migration.manga.process.MigrationProcedureConfig
@@ -221,6 +221,17 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             }
         }
 
+        private fun scheduleStartupChecks() {
+            binding.root.post {
+                if (!migrationPending && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    checkForAppUpdates()
+                    lifecycleScope.launchIO {
+                        extensionManager.getExtensionUpdates(true)
+                    }
+                }
+            }
+        }
+
     private val basePreferences: BasePreferences by injectLazy()
     private val displayRefreshRateController by lazy { DisplayRefreshRateController(window) }
 
@@ -257,6 +268,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         get() = maxOf(binding.toolbar.height, binding.cardFrame.height, binding.appBar.attrToolbarHeight)
 
     private var actionMode: ActionMode? = null
+    private var migrationPending = false
     private var backPressedCallback: OnBackPressedCallback? = null
     private val backCallback = {
         pressingBack()
@@ -456,18 +468,26 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
         val content: ViewGroup = binding.mainContent
 
-        if (savedInstanceState == null && this !is SearchActivity) {
-            // Reset Incognito Mode on relaunch
-            preferences.incognitoMode().set(false)
+        if (this !is SearchActivity) {
+            if (savedInstanceState == null) {
+                // Reset Incognito Mode on relaunch
+                preferences.incognitoMode().set(false)
+            }
+            migrationPending = true
+            lifecycleScope.launchIO {
+                val didMigration = Migrator.awaitAndRelease()
+                withUIContext {
+                    migrationPending = false
+                    initializeRoot()
 
-            val didMigration = Migrator.awaitAndRelease()
-
-            // Show changelog if needed
-            if (didMigration) {
-                if (!BuildConfig.DEBUG) {
-                    content.post {
-                        whatsNewSheet().show()
+                    // Show changelog if needed
+                    if (didMigration && !BuildConfig.DEBUG) {
+                        content.post {
+                            whatsNewSheet().show()
+                        }
                     }
+                    splashState.ready = true
+                    scheduleStartupChecks()
                 }
             }
         }
@@ -551,7 +571,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             if (currentRoot?.tag()?.toIntOrNull() != id) {
                 setRoot(
                     when (id) {
-                        R.id.nav_library -> if (basePreferences.composeLibrary().get()) LibraryComposeController() else LibraryController()
+                        R.id.nav_library -> LibraryController()
                         R.id.nav_recents -> RecentsController()
                         else -> BrowseController()
                     },
@@ -567,15 +587,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             true
         }
 
-        if (!router.hasRootController()) {
-            // Set start screen
-            if (!handleIntentAction(intent)) {
-                goToStartingTab()
-                if (!basePreferences.hasShownOnboarding().get()) {
-                    router.pushController(OnboardingController().withFadeInTransaction())
-                }
-            }
-        }
+        if (!migrationPending) initializeRoot()
 
         binding.toolbar.setNavigationOnClickListener {
             onBackPressedDispatcher.onBackPressed()
@@ -723,10 +735,6 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         (router.backstack.lastOrNull()?.controller as? SettingsLegacyController)?.setTitle()
 
         splashScreen?.configure()
-
-        lifecycleScope.launchIO {
-            extensionManager.getExtensionUpdates(true)
-        }
 
         preferences.extensionUpdatesCount()
             .changesIn(lifecycleScope) {
@@ -961,10 +969,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     override fun onResume() {
         super.onResume()
         displayRefreshRateController.onResume(basePreferences.displayRefreshRate().get())
-        checkForAppUpdates()
-        lifecycleScope.launchIO {
-            extensionManager.getExtensionUpdates(false)
-        }
+        scheduleStartupChecks()
         setExtensionsBadge()
         showDLQueueTutorial()
         reEnableBackPressedCallBack()
@@ -1052,6 +1057,11 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     @SuppressLint("MissingSuperCall")
     override fun onNewIntent(intent: Intent) {
+        if (migrationPending) {
+            setIntent(intent)
+            super.onNewIntent(intent)
+            return
+        }
         splashState.ready = true
         if (!handleIntentAction(intent)) {
             super.onNewIntent(intent)
@@ -1255,7 +1265,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         get() = binding.bottomNav ?: binding.sideNav!!
 
     private fun setStartingTab() {
-        if (this is SearchActivity || !isBindingInitialized) return
+        if (migrationPending || this is SearchActivity || !isBindingInitialized) return
         if (nav.selectedItemId != R.id.nav_browse &&
             preferences.startingTab().get() >= 0
         ) {
@@ -1280,6 +1290,16 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
 
     private fun goToStartingTab() {
         nav.selectedItemId = startingTab()
+    }
+
+    private fun initializeRoot() {
+        if (router.hasRootController()) return
+        if (!handleIntentAction(intent)) {
+            goToStartingTab()
+            if (!basePreferences.hasShownOnboarding().get()) {
+                router.pushController(OnboardingController().withFadeInTransaction())
+            }
+        }
     }
 
     fun goToTab(@IdRes id: Int) {

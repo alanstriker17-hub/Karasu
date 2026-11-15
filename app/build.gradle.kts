@@ -261,9 +261,7 @@ dependencies {
     androidTestImplementation(libs.bundles.test.android)
     testImplementation(kotlinx.coroutines.test)
 
-    // For detecting memory leaks
-    // REF: https://square.github.io/leakcanary/
-    debugImplementation(libs.leakcanary.android)
+    // Keep the lightweight release no-op; heap-dump analysis is excluded from user-facing debug betas.
     implementation(libs.leakcanary.plumber)
 }
 

@@ -117,7 +117,11 @@ open class ReaderPageImageView @JvmOverloads constructor(
     fun recycle() = pageView?.let {
         when (it) {
             is SubsamplingScaleImageView -> it.recycle()
-            is AppCompatImageView -> it.dispose()
+            is AppCompatImageView -> {
+                (it.drawable as? Animatable)?.stop()
+                it.dispose()
+                it.setImageDrawable(null)
+            }
         }
         it.isVisible = false
     }
@@ -250,14 +254,6 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     return@apply
                 }
 
-                val bitmapConfig = if (
-                    ImageUtil.findImageType { data.peek().inputStream() } == ImageUtil.ImageType.JPEG
-                ) {
-                    Bitmap.Config.RGB_565
-                } else {
-                    Bitmap.Config.ARGB_8888
-                }
-
                 ImageRequest.Builder(context)
                     .data(data)
                     .memoryCachePolicy(CachePolicy.DISABLED)
@@ -274,7 +270,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     )
                     .size(ViewSizeResolver(this@ReaderPageImageView))
                     .precision(Precision.INEXACT)
-                    .bitmapConfig(bitmapConfig)
+                    .bitmapConfig(Bitmap.Config.RGB_565)
                     .cropBorders(config.cropBorders)
                     .customDecoder(true)
                     .crossfade(false)

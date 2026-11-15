@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.util.system
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -84,6 +85,15 @@ fun WebView.setDefaultSettings() {
     }
 
     CookieManager.getInstance().acceptThirdPartyCookies(this)
+}
+
+fun WebView.destroyAndDetach() {
+    (parent as? ViewGroup)?.removeView(this)
+    stopLoading()
+    clearCache(false)
+    clearHistory()
+    removeAllViews()
+    destroy()
 }
 
 private fun WebView.getWebViewMajorVersion(): Int {
