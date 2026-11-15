@@ -123,9 +123,22 @@ jobs:
           echo "VERSION_TAG=v${{github.event.inputs.version}}-b${BETA_COUNT}" >> $GITHUB_ENV
           if [ "${{ github.event.inputs.debug }}" = "true" ]; then
             echo "BUILD_TYPE=StandardDebug" >> $GITHUB_ENV
+            echo "DEBUG_BUILD=true" >> $GITHUB_ENV
           else
             echo "BUILD_TYPE=StandardBeta" >> $GITHUB_ENV
           fi
+
+      - name: Prepare branch debug beta
+        if: startsWith(steps.branch_name.outputs.NAME, 'backport/debug-beta/')
+        run: |
+          VERSION_TAG="${GITHUB_REF_NAME#backport/debug-beta/}"
+          if [[ ! "$VERSION_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-b[0-9]+$ ]]; then
+            echo "Invalid debug beta branch name: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          echo "VERSION_TAG=${VERSION_TAG}" >> $GITHUB_ENV
+          echo "BUILD_TYPE=StandardDebug" >> $GITHUB_ENV
+          echo "DEBUG_BUILD=true" >> $GITHUB_ENV
 
       # NIGHTLY
       - name: Prepare nightly build
@@ -183,9 +196,9 @@ jobs:
           echo "STAGE=${stage}" >> $GITHUB_OUTPUT
 
       - name: Sign APK
-        if: env.VERSION_TAG != '' && steps.version_stage.outputs.STAGE != 'nightly' && github.event.inputs.debug != 'true'
+        if: env.VERSION_TAG != '' && steps.version_stage.outputs.STAGE != 'nightly' && env.DEBUG_BUILD != 'true'
         env:
-          RELEASE_DIR: app/build/outputs/apk/standard/${{ github.event.inputs.debug == 'true' && 'debug' || steps.version_stage.outputs.STAGE }}
+          RELEASE_DIR: app/build/outputs/apk/standard/${{ env.DEBUG_BUILD == 'true' && 'debug' || steps.version_stage.outputs.STAGE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           ALIAS: ${{ secrets.ALIAS }}
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
@@ -217,10 +230,10 @@ jobs:
         run: |
           set -e
 
-          build_stage="${{ github.event.inputs.debug == 'true' && 'debug' || steps.version_stage.outputs.STAGE }}"
+          build_stage="${{ env.DEBUG_BUILD == 'true' && 'debug' || steps.version_stage.outputs.STAGE }}"
           dir="app/build/outputs/apk/standard/${build_stage}"
           signed_suffix=""
-          if [ "${{ github.event.inputs.debug }}" != "true" ] && [ "${{ steps.version_stage.outputs.STAGE }}" != "nightly" ]; then
+          if [ "${{ env.DEBUG_BUILD }}" != "true" ] && [ "${{ steps.version_stage.outputs.STAGE }}" != "nightly" ]; then
             signed_suffix="-signed"
           fi
 
@@ -253,7 +266,7 @@ jobs:
           body: |
             ${{ github.event.inputs.message }}
 
-            ${{ github.event.inputs.debug == 'true' && '> Debug-signed side-by-side test build; not release-signed.' || '' }}
+            ${{ env.DEBUG_BUILD == 'true' && '> Debug-signed side-by-side test build; not release-signed.' || '' }}
 
             ${{ steps.changelog.outputs.CHANGELOG }}
             ---
@@ -277,8 +290,8 @@ jobs:
             karasu-armeabi-v7a-${{ env.VERSION_TAG }}.apk
             karasu-x86-${{ env.VERSION_TAG }}.apk
             karasu-x86_64-${{ env.VERSION_TAG }}.apk
-          draft: ${{ github.event.inputs.beta != 'true' }}
-          prerelease: ${{ github.event.inputs.beta }}
+          draft: ${{ steps.version_stage.outputs.STAGE != 'beta' }}
+          prerelease: ${{ steps.version_stage.outputs.STAGE == 'beta' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
