@@ -4,6 +4,7 @@ import android.content.Context
 import android.webkit.WebSettings
 import eu.kanade.tachiyomi.network.interceptor.AutoUserAgentInterceptor
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
+import eu.kanade.tachiyomi.network.interceptor.HostCircuitBreakerInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -54,6 +55,7 @@ class NetworkHelper(
         builder.addInterceptor(
             CloudflareInterceptor(context, cookieJar, flareSolverr, ::defaultUserAgent),
         )
+        builder.addInterceptor(HostCircuitBreakerInterceptor())
 
         when (preferences.dohProvider().get()) {
             PREF_DOH_CLOUDFLARE -> builder.dohCloudflare()

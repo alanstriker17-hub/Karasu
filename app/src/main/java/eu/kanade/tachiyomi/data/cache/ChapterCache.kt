@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.cache
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.text.format.Formatter
 import co.touchlab.kermit.Logger
 import com.jakewharton.disklrucache.DiskLruCache
@@ -9,6 +10,7 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.saveTo
+import eu.kanade.tachiyomi.util.system.ImageUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -187,6 +189,34 @@ class ChapterCache(private val context: Context) {
         } catch (e: IOException) {
             false
         }
+    }
+
+    fun isImageValid(imageUrl: String): Boolean {
+        val imageFile = getImageFile(imageUrl)
+        if (!imageFile.isFile || imageFile.length() == 0L) return false
+
+        val imageType = ImageUtil.findImageType { imageFile.inputStream() } ?: run {
+            Logger.w { "Ignoring invalid cached image" }
+            return false
+        }
+        if (imageType == ImageUtil.ImageType.JXL) return true
+
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        return try {
+            imageFile.inputStream().use { BitmapFactory.decodeStream(it, null, options) }
+            options.outWidth > 0 && options.outHeight > 0
+        } catch (e: IOException) {
+            Logger.w(e) { "Failed to validate cached image" }
+            false
+        } catch (e: IllegalArgumentException) {
+            Logger.w(e) { "Failed to validate cached image" }
+            false
+        }
+    }
+
+    @Throws(IOException::class)
+    fun removeImageFromCache(imageUrl: String) {
+        diskCache.remove(DiskUtil.hashKeyForDisk(imageUrl))
     }
 
     /**

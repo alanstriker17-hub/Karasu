@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.withIOContext
+import java.io.IOException
 import java.util.concurrent.PriorityBlockingQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
@@ -177,7 +178,7 @@ class HttpPageLoader(
         val imageUrl = page.imageUrl
 
         // Check if the image has been deleted
-        if (page.status is Page.State.Ready && imageUrl != null && !chapterCache.isImageInCache(imageUrl)) {
+        if (page.status is Page.State.Ready && imageUrl != null && !chapterCache.isImageValid(imageUrl)) {
             page.status = Page.State.Queue
         }
 
@@ -292,10 +293,17 @@ class HttpPageLoader(
         }
         val imageUrl = page.imageUrl!!
 
-        if (!chapterCache.isImageInCache(imageUrl)) {
-            page.status = Page.State.DownloadImage
-            val imageResponse = source.getImage(page)
-            chapterCache.putImageToCache(imageUrl, imageResponse)
+        if (!chapterCache.isImageValid(imageUrl)) {
+            chapterCache.removeImageFromCache(imageUrl)
+            for (attempt in 0..1) {
+                page.status = Page.State.DownloadImage
+                chapterCache.putImageToCache(imageUrl, source.getImage(page))
+                if (chapterCache.isImageValid(imageUrl)) break
+
+                chapterCache.removeImageFromCache(imageUrl)
+                if (attempt == 1) throw IOException("Source returned an invalid image for ${page.number}")
+                Logger.w { "Retrying invalid image for page ${page.number}" }
+            }
         }
 
         page.stream = { chapterCache.getImageFile(imageUrl).inputStream() }
