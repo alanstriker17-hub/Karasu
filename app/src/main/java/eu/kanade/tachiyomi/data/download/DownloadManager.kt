@@ -402,6 +402,7 @@ class DownloadManager(
         if (oldDownload.renameTo(newName)) {
             cache.removeChapters(listOf(oldChapter), manga)
             cache.addChapter(newName, mangaDir, manga)
+            provider.indexChapter(newChapter, manga, source)
         } else {
             Logger.e { "Could not rename downloaded chapter: ${oldNames.joinToString()}" }
         }

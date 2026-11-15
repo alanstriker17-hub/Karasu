@@ -65,6 +65,7 @@ class DownloadCache(
     private val provider: DownloadProvider = Injekt.get(),
     private val sourceManager: SourceManager = Injekt.get(),
     private val storageManager: StorageManager = Injekt.get(),
+    private val safIndex: SafIndexDatabase = Injekt.get(),
 ) {
 
     val scope = CoroutineScope(Dispatchers.IO)
@@ -117,7 +118,7 @@ class DownloadCache(
         }
 
         storageManager.changes
-            .onEach { forceRenewCache() } // invalidate cache
+            .onEach { forceRenewCache() }
             .launchIn(scope)
     }
 
@@ -183,13 +184,13 @@ class DownloadCache(
         lastRenew = 0L
         renewalJob?.cancel()
         diskCacheFile.delete()
-        renewCache()
+        renewCache(forceIndexRefresh = true)
     }
 
     /**
      * Renews the downloads cache.
      */
-    private fun renewCache() {
+    private fun renewCache(forceIndexRefresh: Boolean = false) {
         if (lastRenew + renewInterval >= System.currentTimeMillis() || renewalJob?.isActive == true) {
             return
         }
@@ -207,7 +208,7 @@ class DownloadCache(
             rootDownloadsDirLock.withLock {
                 rootDownloadsDir = RootDirectory(storageManager.getDownloadsDirectory())
 
-                val sourceDirs = rootDownloadsDir.dir?.listFiles().orEmpty()
+                val sourceDirs = listDirectory(rootDownloadsDir.dir, refresh = forceIndexRefresh)
                     .filter { it.isDirectory && !it.name.isNullOrBlank() }
                     .mapNotNull { dir ->
                         val sourceId = sourceMap[dir.name!!.lowercase()]
@@ -220,12 +221,12 @@ class DownloadCache(
                 sourceDirs.values
                     .map { sourceDir ->
                         async {
-                            sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
+                            sourceDir.mangaDirs = listDirectory(sourceDir.dir, refresh = forceIndexRefresh)
                                 .filter { it.isDirectory && !it.name.isNullOrBlank() }
                                 .associate { it.name!! to MangaDirectory(it) }
 
                             sourceDir.mangaDirs.values.forEach { mangaDir ->
-                                val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
+                                val chapterDirs = listDirectory(mangaDir.dir, refresh = forceIndexRefresh)
                                     .mapNotNull {
                                         when {
                                             // Ignore incomplete downloads
@@ -266,6 +267,17 @@ class DownloadCache(
         return sourceManager.getOnlineSources()
     }
 
+    private fun listDirectory(directory: UniFile?, refresh: Boolean): List<UniFile> {
+        if (directory == null) return emptyList()
+        val indexed = safIndex.listChildren(directory, refresh)
+        if (indexed == null) return directory.listFiles().orEmpty().toList()
+
+        return indexed.map { entry ->
+            UniFile.fromUri(context, Uri.parse(entry.uri))
+                ?: throw IllegalStateException("Could not resolve indexed SAF document ${entry.uri}")
+        }
+    }
+
     private fun notifyChanges() {
         scope.launchNonCancellableIO {
             _changes.send(Unit)
@@ -297,6 +309,7 @@ class DownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun addChapter(chapterDirName: String, mangaUniFile: UniFile?, manga: Manga) {
+        safIndex.invalidateChildren(mangaUniFile?.uri)
         rootDownloadsDirLock.withLock {
             // Retrieve the cached source directory or cache a new one
             var sourceDir = rootDownloadsDir.sourceDirs[manga.source]
@@ -329,6 +342,9 @@ class DownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun removeChapters(chapters: List<Chapter>, manga: Manga) {
+        manga.id?.let { mangaId ->
+            safIndex.removeChapters(chapters.mapNotNull { it.id }, mangaId)
+        }
         rootDownloadsDirLock.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             val mangaDir = sourceDir.mangaDirs[provider.getMangaDirName(manga)] ?: return
@@ -348,6 +364,7 @@ class DownloadCache(
         rootDownloadsDirLock.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             val mangaDir = sourceDir.mangaDirs[provider.getMangaDirName(manga)] ?: return
+            safIndex.invalidateChildren(mangaDir.dir?.uri)
 
             folders.forEach { chapter ->
                 if (chapter in mangaDir.chapterDirs) {
@@ -378,6 +395,7 @@ class DownloadCache(
      * @param manga the manga to remove.
      */
     suspend fun removeManga(manga: Manga) {
+        manga.id?.let(safIndex::removeManga)
         rootDownloadsDirLock.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             val mangaDirName = provider.getMangaDirName(manga)
@@ -390,6 +408,7 @@ class DownloadCache(
     }
 
     suspend fun removeSource(source: Source) {
+        safIndex.removeSource(source.id)
         rootDownloadsDirLock.withLock {
             rootDownloadsDir.sourceDirs -= source.id
         }

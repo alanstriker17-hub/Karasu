@@ -450,6 +450,7 @@ class Downloader(
                 tmpDir.renameTo(chapterDirname)
             }
             cache.addChapter(chapterDirname, mangaDir, download.manga)
+            provider.indexChapter(download.chapter, download.manga, download.source)
 
             DiskUtil.createNoMediaFile(tmpDir, context)
 

@@ -1,6 +1,9 @@
 package eu.kanade.tachiyomi.data.download
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
+import android.net.Uri
+import co.touchlab.kermit.Logger
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.domain.manga.models.Manga
@@ -10,8 +13,12 @@ import eu.kanade.tachiyomi.util.storage.DiskUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import uy.kohesive.injekt.injectLazy
 import karasu.domain.download.DownloadPreferences
 import karasu.domain.storage.StorageManager
@@ -31,6 +38,7 @@ class DownloadProvider(private val context: Context) {
      */
     private val downloadPreferences: DownloadPreferences by injectLazy()
     private val storageManager: StorageManager by injectLazy()
+    private val safIndex: SafIndexDatabase by injectLazy()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -40,8 +48,20 @@ class DownloadProvider(private val context: Context) {
     private var downloadsDir = storageManager.getDownloadsDirectory()
 
     init {
+        scope.launch {
+            try {
+                withTimeout(INDEX_WARM_TIMEOUT) {
+                    safIndex.warmChapterCache()
+                }
+            } catch (e: TimeoutCancellationException) {
+                Logger.w(e) { "Timed out warming the SAF chapter index" }
+            } catch (e: SQLiteException) {
+                Logger.e(e) { "Failed to warm the SAF chapter index" }
+            }
+        }
         storageManager.changes.onEach {
             downloadsDir = storageManager.getDownloadsDirectory()
+            safIndex.clear()
         }.launchIn(scope)
     }
 
@@ -88,10 +108,39 @@ class DownloadProvider(private val context: Context) {
      * @param source the source of the chapter.
      */
     fun findChapterDir(chapter: Chapter, manga: Manga, source: Source): UniFile? {
+        val chapterId = chapter.id
+        val mangaId = manga.id
+        if (chapterId != null && mangaId != null) {
+            val indexed = safIndex.findChapter(chapterId, mangaId)
+            if (indexed != null) {
+                val file = UniFile.fromUri(context, Uri.parse(indexed.uri))
+                if (file?.exists() == true) return file
+                safIndex.evictChapter(chapterId)
+            }
+        }
+
         val mangaDir = findMangaDir(manga, source)
         return getValidChapterDirNames(chapter).asSequence()
             .mapNotNull { mangaDir?.findFile(it) ?: mangaDir?.findFile("$it.cbz") }
             .firstOrNull()
+    }
+
+    suspend fun indexChapter(chapter: Chapter, manga: Manga, source: Source) {
+        val chapterId = chapter.id ?: return
+        val mangaId = manga.id ?: return
+        withContext(Dispatchers.IO) {
+            val chapterDir = findChapterDir(chapter, manga, source) ?: return@withContext
+            val parentUri = chapterDir.parentFile?.uri ?: return@withContext
+            safIndex.upsertChapter(
+                chapterId,
+                SafIndexedChapter(
+                    mangaId = mangaId,
+                    sourceId = source.id,
+                    parentUri = parentUri.toString(),
+                    uri = chapterDir.uri.toString(),
+                ),
+            )
+        }
     }
 
     /**
@@ -253,5 +302,9 @@ class DownloadProvider(private val context: Context) {
             // Legacy chapter directory name used in v0.8.4 and before
             add(DiskUtil.buildValidFilename(chapter.name))
         }.distinct()
+    }
+
+    private companion object {
+        const val INDEX_WARM_TIMEOUT = 5_000L
     }
 }
