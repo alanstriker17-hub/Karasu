@@ -700,7 +700,7 @@ class PagerPageHolder(
                     return imageSource
                 }
 
-                return if (height < width) {
+                return if (width > height * 1.2f) {
                     closeSources(imageSource)
                     page.longPage = true
                     splitDoublePages()
