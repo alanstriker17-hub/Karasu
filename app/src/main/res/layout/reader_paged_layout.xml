@@ -147,6 +147,14 @@
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/trim_webtoon_gaps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/trim_webtoon_gaps"
+            android:textColor="?attr/colorOnBackground" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/webtoon_enable_zoom_out"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

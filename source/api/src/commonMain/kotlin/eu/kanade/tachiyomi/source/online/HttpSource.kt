@@ -66,7 +66,7 @@ abstract class HttpSource : CatalogueSource {
      * Default network client for doing requests.
      */
     open val client: OkHttpClient
-        get() = network.client
+        get() = network.clientForSource(id)
 
     fun bindDelegate(delegate: DelegatedHttpSource) {
         this.delegate = delegate

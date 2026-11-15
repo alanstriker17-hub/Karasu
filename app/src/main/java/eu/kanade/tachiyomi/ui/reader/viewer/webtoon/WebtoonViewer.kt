@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.graphics.PointF
 import android.os.Build
+import android.app.ActivityManager
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -59,6 +60,12 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
      * Adapter of the recycler view.
      */
     private val adapter = WebtoonAdapter(this)
+    private val pageViewCacheSize =
+        if (activity.getSystemService(ActivityManager::class.java)?.isLowRamDevice == true) {
+            LOW_RAM_RECYCLER_VIEW_CACHE_SIZE
+        } else {
+            RECYCLER_VIEW_CACHE_SIZE
+        }
 
     /**
      * Currently active item. It can be a chapter page or a chapter transition.
@@ -73,7 +80,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
     val config = WebtoonConfig(scope)
 
     init {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) recycler.setItemViewCacheSize(RECYCLER_VIEW_CACHE_SIZE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) recycler.setItemViewCacheSize(pageViewCacheSize)
         recycler.isVisible = false // Don't let the recycler layout yet
         recycler.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
         recycler.itemAnimator = null
@@ -220,7 +227,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
 
     private fun trimPageViewCache() {
         recycler.setItemViewCacheSize(0)
-        recycler.setItemViewCacheSize(RECYCLER_VIEW_CACHE_SIZE)
+        recycler.setItemViewCacheSize(pageViewCacheSize)
     }
 
     /**
@@ -396,6 +403,7 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
 }
 
 private const val RECYCLER_VIEW_CACHE_SIZE = 4
+private const val LOW_RAM_RECYCLER_VIEW_CACHE_SIZE = 1
 
 /** Fraction of the screen to land above the saved spot when resuming. */
 private const val RESUME_LEEWAY = 0.1f

@@ -109,6 +109,8 @@ class PreferencesHelper(val context: Context, val preferenceStore: PreferenceSto
 
     fun cropBordersWebtoon() = preferenceStore.getBoolean(Keys.cropBordersWebtoon, false)
 
+    fun trimWebtoonGaps() = preferenceStore.getBoolean(Keys.trimWebtoonGaps, false)
+
     fun navigateToPan() = preferenceStore.getBoolean("navigate_pan", true)
 
     fun landscapeZoom() = preferenceStore.getBoolean("landscape_zoom", false)

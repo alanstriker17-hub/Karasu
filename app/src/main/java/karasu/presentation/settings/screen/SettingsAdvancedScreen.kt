@@ -24,6 +24,7 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.extension.installer.ShizukuInstaller
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.tachiyomi.network.parseSourceNetworkRoutes
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import eu.kanade.tachiyomi.network.PREF_DOH_360
 import eu.kanade.tachiyomi.network.PREF_DOH_ADGUARD
@@ -282,6 +283,21 @@ object SettingsAdvancedScreen : ComposableSettings() {
                         return@onChange false
                     }
                     true
+                },
+            ))
+            add(Preference.PreferenceItem.EditTextPreference(
+                pref = networkPreferences.sourceNetworkRoutes(),
+                title = "Per-source network routes",
+                subtitle = "Use sourceId,dns,proxy,host,port records separated by semicolons. DNS: inherit/cloudflare; proxy: none/http/socks5. Enter none to clear.",
+                onValueChanged = { value ->
+                    val result = parseSourceNetworkRoutes(value)
+                    if (result.isFailure) {
+                        context.toast("Invalid per-source network route: ${result.exceptionOrNull()?.message}")
+                        false
+                    } else {
+                        context.toast(MR.strings.requires_app_restart)
+                        true
+                    }
                 },
             ))
             add(Preference.PreferenceItem.ListPreference(

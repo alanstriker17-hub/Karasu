@@ -30,6 +30,9 @@ class WebtoonConfig(
     var webtoonCropBorders = false
         private set
 
+    var trimWebtoonGaps = false
+        private set
+
     var verticalCropBorders = true
         private set
 
@@ -76,6 +79,9 @@ class WebtoonConfig(
 
         preferences.cropBordersWebtoon()
             .register({ webtoonCropBorders = it }, { imagePropertyChangedListener?.invoke() })
+
+        preferences.trimWebtoonGaps()
+            .register({ trimWebtoonGaps = it }, { imagePropertyChangedListener?.invoke() })
 
         preferences.cropBorders()
             .register({ verticalCropBorders = it }, { imagePropertyChangedListener?.invoke() })

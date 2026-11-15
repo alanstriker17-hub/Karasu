@@ -224,16 +224,16 @@ class WebtoonPageHolder(
     }
 
     private fun process(imageSource: BufferedSource): BufferedSource {
-        if (!viewer.config.splitPages) {
-            return imageSource
+        var result = imageSource
+        if (viewer.config.splitPages && ImageUtil.isWideImage(result)) {
+            result = ImageUtil.splitAndStackBitmap(result, viewer.config.invertDoublePages, viewer.hasMargins)
         }
 
-        val isDoublePage = ImageUtil.isWideImage(imageSource)
-        if (!isDoublePage) {
-            return imageSource
+        if (viewer.config.trimWebtoonGaps && !ImageUtil.isAnimatedAndSupported(result)) {
+            result = ImageUtil.trimWebtoonGaps(result)
         }
 
-        return ImageUtil.splitAndStackBitmap(imageSource, viewer.config.invertDoublePages, viewer.hasMargins)
+        return result
     }
 
     /**

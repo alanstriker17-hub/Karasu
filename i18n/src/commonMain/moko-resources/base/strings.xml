@@ -135,6 +135,8 @@
 
     <!-- Library -->
     <string name="library">Library</string>
+    <string name="library_hero_stats">%1$d series | %2$d unread</string>
+    <string name="library_zen_mode">Zen mode</string>
     <string name="your_library">Your library</string>
     <string name="updating_library">Updating library</string>
     <string name="not_selected">Not selected</string>
@@ -662,6 +664,7 @@
     <string name="navigate_pan">Navigate to pan</string>
     <string name="split_double_pages_portrait">Split double pages in portrait</string>
     <string name="crop_borders">Crop borders</string>
+    <string name="trim_webtoon_gaps">Trim inter-panel gaps (beta)</string>
     <string name="crop_borders_paged">Crop borders (Paged)</string>
     <string name="crop_borders_long_strip">Crop borders (Long strip)</string>
     <string name="remove_crop">Remove crop</string>

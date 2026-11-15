@@ -145,6 +145,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import karasu.domain.library.LibraryPreferences
 import karasu.domain.ui.UiPreferences
 import karasu.i18n.MR
 import karasu.util.lang.getString
@@ -242,6 +243,9 @@ open class LibraryController(
         }
 
     private var filterTooltip: ViewTooltip? = null
+    private val libraryPreferences: LibraryPreferences by lazy { Injekt.get() }
+    private val zenMode: Boolean
+        get() = libraryPreferences.zenMode().get()
     private var isAnimatingHopper: Boolean? = null
     private var animatorSet: AnimatorSet? = null
     var hasMovedHopper = preferences.shownHopperSwipeTutorial().get()
@@ -371,6 +375,7 @@ open class LibraryController(
     }
 
     fun updateHopperAlpha() {
+        if (zenMode) return
         binding.roundedCategoryHopper.upCategory.alpha = if (isAtTop()) 0.25f else 1f
         binding.roundedCategoryHopper.downCategory.alpha = if (isAtBottom()) 0.25f else 1f
     }
@@ -411,6 +416,11 @@ open class LibraryController(
     }
 
     fun updateHopperPosition() {
+        if (zenMode) {
+            binding.categoryHopperFrame.isVisible = false
+            binding.jumperCategoryText.isVisible = false
+            return
+        }
         val shortAnimationDuration = resources?.getInteger(
             AR.integer.config_shortAnimTime,
         ) ?: 0
@@ -463,8 +473,29 @@ open class LibraryController(
     }
 
     fun showMiniBar() {
-        binding.headerCard.isVisible = showCategoryInTitle
+        binding.headerCard.isVisible = showCategoryInTitle && !zenMode
         setSubtitle()
+    }
+
+    private fun applyZenMode() {
+        if (!isBindingInitialized) return
+        if (zenMode && binding.recyclerCover.isClickable) showCategories(false)
+        binding.headerCard.isVisible = showCategoryInTitle && !zenMode
+        binding.categoryHopperFrame.isVisible =
+            !zenMode && !singleCategory && !preferences.hideHopper().get()
+        binding.jumperCategoryText.isVisible = !zenMode && !preferences.hideHopper().get()
+        binding.fastScroller.isVisible = !zenMode
+        binding.recyclerShadow.isVisible = !zenMode
+    }
+
+    private fun updateLibraryHero(items: List<LibraryItem>) {
+        val manga = items.filterIsInstance<LibraryMangaItem>()
+            .distinctBy { it.manga.manga.id }
+        binding.headerStats.text = binding.root.context.getString(
+            MR.strings.library_hero_stats,
+            manga.size,
+            manga.sumOf { it.manga.unread },
+        )
     }
 
     private fun setSubtitle() {
@@ -615,6 +646,7 @@ open class LibraryController(
         }
         setupFilterSheet()
         setUpHopper()
+        applyZenMode()
         setPreferenceFlows()
         LibraryUpdateJob.updateFlow.onEach(::onUpdateManga).launchIn(viewScope)
         viewScope.launchUI {
@@ -883,8 +915,8 @@ open class LibraryController(
     }
 
     fun hideHopper(hide: Boolean) {
-        binding.categoryHopperFrame.isVisible = !singleCategory && !hide
-        binding.jumperCategoryText.isVisible = !hide
+        binding.categoryHopperFrame.isVisible = !zenMode && !singleCategory && !hide
+        binding.jumperCategoryText.isVisible = !zenMode && !hide
     }
 
     fun jumpToNextCategory(next: Boolean): Boolean {
@@ -1150,6 +1182,7 @@ open class LibraryController(
         }
         view ?: return
         destroyActionModeIfNeeded()
+        updateLibraryHero(mangaMap)
         if (mangaMap.isNotEmpty()) {
             if (!binding.progress.isVisible) {
                 (activity as? MainActivity)?.showNotificationPermissionPrompt()
@@ -1241,7 +1274,7 @@ open class LibraryController(
             setActiveCategory()
         }
 
-        binding.categoryHopperFrame.isVisible = !singleCategory && !preferences.hideHopper().get()
+        binding.categoryHopperFrame.isVisible = !zenMode && !singleCategory && !preferences.hideHopper().get()
         adapter.isLongPressDragEnabled = canDrag()
         binding.categoryRecycler.setCategories(
             presenter.categories,
@@ -1943,6 +1976,7 @@ open class LibraryController(
     //region Toolbar options methods
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.library, menu)
+        menu.findItem(R.id.action_zen_mode)?.isChecked = zenMode
 
         val searchItem = activityBinding?.searchToolbar?.searchItem
         val searchView = activityBinding?.searchToolbar?.searchView
@@ -2023,6 +2057,11 @@ open class LibraryController(
                 } else {
                     showDisplayOptions()
                 }
+            }
+            R.id.action_zen_mode -> {
+                libraryPreferences.zenMode().set(!zenMode)
+                item.isChecked = zenMode
+                applyZenMode()
             }
             else -> return super.onOptionsItemSelected(item)
         }

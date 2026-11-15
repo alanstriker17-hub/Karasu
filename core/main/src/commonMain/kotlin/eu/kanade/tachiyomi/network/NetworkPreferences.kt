@@ -12,6 +12,8 @@ class NetworkPreferences(
 
     fun dohProvider() = preferenceStore.getInt("doh_provider", -1)
 
+    fun sourceNetworkRoutes() = preferenceStore.getString("source_network_routes", "")
+
     fun defaultUserAgent() = preferenceStore.getString("default_user_agent", DEFAULT_USER_AGENT)
 
     /** Base URL of a FlareSolverr instance. Blank disables the fallback. */

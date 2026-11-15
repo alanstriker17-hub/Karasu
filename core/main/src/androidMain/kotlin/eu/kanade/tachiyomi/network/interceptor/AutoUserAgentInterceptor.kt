@@ -11,9 +11,8 @@ class AutoUserAgentInterceptor(
     private val sourceUserAgentProvider: (String) -> String? = { null },
 ) : Interceptor {
 
-    private val startupUserAgent by lazy {
-        WebSettings.getDefaultUserAgent(context).replace("\n", " ").trim()
-    }
+    private val startupUserAgent =
+        WebSettings.getDefaultUserAgent(context.applicationContext).replace("\n", " ").trim()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
@@ -21,17 +20,17 @@ class AutoUserAgentInterceptor(
         val sourceUserAgent = sourceUserAgentProvider(host)
 
         val request = when {
+            !originalRequest.header("User-Agent").isNullOrEmpty() -> originalRequest
+
             sourceUserAgent != null -> originalRequest.newBuilder()
                 .removeHeader("User-Agent")
                 .addHeader("User-Agent", sourceUserAgent)
                 .build()
 
-            originalRequest.header("User-Agent").isNullOrEmpty() -> originalRequest.newBuilder()
+            else -> originalRequest.newBuilder()
                 .removeHeader("User-Agent")
                 .addHeader("User-Agent", defaultUserAgentProvider().ifBlank { startupUserAgent })
                 .build()
-
-            else -> originalRequest
         }
 
         return chain.proceed(request)

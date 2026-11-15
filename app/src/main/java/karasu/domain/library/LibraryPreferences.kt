@@ -13,6 +13,8 @@ class LibraryPreferences(private val preferenceStore: PreferenceStore) {
 
     fun autoIncognitoCategories() = preferenceStore.getStringSet("auto_incognito_categories", emptySet())
 
+    fun zenMode() = preferenceStore.getBoolean("library_zen_mode", false)
+
     /** When the calendar-driven sweep of the category rules last ran. See `ApplyCategoryRules`. */
     fun lastCategoryRuleSweep() = preferenceStore.getLong("last_category_rule_sweep", 0)
 

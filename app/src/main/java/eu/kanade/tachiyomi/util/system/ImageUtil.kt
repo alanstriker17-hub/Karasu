@@ -347,6 +347,102 @@ object ImageUtil {
         return options.outWidth > options.outHeight
     }
 
+    fun trimWebtoonGaps(imageSource: BufferedSource): BufferedSource {
+        val options = extractImageOptions(imageSource)
+        val width = options.outWidth
+        val height = options.outHeight
+        if (width <= 0 || height <= 0) return imageSource
+
+        val pixelCount = width.toLong() * height
+        if (pixelCount > MAX_WEBTOON_TRIM_WORKING_BYTES / 12) return imageSource
+        val workingBytes = pixelCount * 12
+        val runtime = Runtime.getRuntime()
+        val availableBytes = runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory()
+        if (workingBytes > MAX_WEBTOON_TRIM_WORKING_BYTES || workingBytes > availableBytes) {
+            Logger.d { "Skipping Webtoon gap trimming for ${width}x$height image due to memory budget" }
+            return imageSource
+        }
+
+        val imageBitmap = try {
+            imageSource.peek().inputStream().use { BitmapFactory.decodeStream(it) }
+        } catch (e: Exception) {
+            Logger.w(e) { "Could not decode image for Webtoon gap trimming" }
+            null
+        } ?: return imageSource
+
+        var trimmedBitmap: Bitmap? = null
+        try {
+            val sampledHeight = (height + GUTTER_SAMPLE_STEP - 1) / GUTTER_SAMPLE_STEP
+            val line = IntArray(width)
+            val shades = IntArray(sampledHeight)
+            val noise = IntArray(sampledHeight)
+            val histogram = IntArray(256)
+            for (row in 0 until sampledHeight) {
+                imageBitmap.getPixels(line, 0, width, 0, row * GUTTER_SAMPLE_STEP, width, 1)
+                measure(line, shades, noise, row, histogram)
+            }
+
+            val gaps = findWebtoonGapBands(shades, noise, width)
+            if (gaps.isEmpty()) return imageSource
+
+            val pixelGaps = gaps.map { band ->
+                val top = (band.first * GUTTER_SAMPLE_STEP).coerceIn(0, height)
+                val bottom = ((band.last + 1) * GUTTER_SAMPLE_STEP).coerceIn(top, height)
+                top until bottom
+            }
+            val removedHeight = pixelGaps.sumOf { it.last - it.first + 1 }
+            val trimmedHeight = height - removedHeight
+            if (trimmedHeight <= 0) return imageSource
+
+            val outputBitmap = Bitmap.createBitmap(
+                width,
+                trimmedHeight,
+                imageBitmap.config ?: Bitmap.Config.ARGB_8888,
+            )
+            trimmedBitmap = outputBitmap
+            val canvas = Canvas(outputBitmap)
+            var sourceTop = 0
+            var destinationTop = 0
+            pixelGaps.forEach { gap ->
+                val gapTop = gap.first
+                if (gapTop > sourceTop) {
+                    val contentHeight = gapTop - sourceTop
+                    canvas.drawBitmap(
+                        imageBitmap,
+                        Rect(0, sourceTop, width, gapTop),
+                        Rect(0, destinationTop, width, destinationTop + contentHeight),
+                        null,
+                    )
+                    destinationTop += contentHeight
+                }
+                sourceTop = gap.last + 1
+            }
+            if (sourceTop < height) {
+                val contentHeight = height - sourceTop
+                canvas.drawBitmap(
+                    imageBitmap,
+                    Rect(0, sourceTop, width, height),
+                    Rect(0, destinationTop, width, destinationTop + contentHeight),
+                    null,
+                )
+            }
+
+            val output = Buffer()
+            val format = if (imageBitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+            if (!outputBitmap.compress(format, 100, output.outputStream())) {
+                Logger.w { "Could not encode trimmed Webtoon image" }
+                return imageSource
+            }
+            return output
+        } catch (e: Exception) {
+            Logger.w(e) { "Could not trim Webtoon panel gaps" }
+            return imageSource
+        } finally {
+            trimmedBitmap?.recycle()
+            imageBitmap.recycle()
+        }
+    }
+
     fun splitAndStackBitmap(
         imageSource: BufferedSource,
         rightSideOnTop: Boolean,
@@ -656,9 +752,10 @@ object ImageUtil {
             val line = IntArray(strip.width)
             val shades = IntArray(strip.height)
             val noise = IntArray(strip.height)
+            val histogram = IntArray(256)
             for (y in 0 until strip.height) {
                 strip.getPixels(line, 0, strip.width, 0, y, strip.width, 1)
-                measure(line, shades, noise, y)
+                measure(line, shades, noise, y, histogram)
             }
             gutterRow(shades, noise, strip.width, (ideal - top) / GUTTER_SAMPLE_STEP)
                 .takeIf { it >= 0 }
@@ -687,9 +784,10 @@ object ImageUtil {
             val line = IntArray(strip.height)
             val shades = IntArray(strip.width)
             val noise = IntArray(strip.width)
+            val histogram = IntArray(256)
             for (x in 0 until strip.width) {
                 strip.getPixels(line, 0, 1, x, 0, 1, strip.height)
-                measure(line, shades, noise, x)
+                measure(line, shades, noise, x, histogram)
             }
             gutterRow(shades, noise, strip.height, (ideal - left) / GUTTER_SAMPLE_STEP)
                 .takeIf { it >= 0 }
@@ -714,10 +812,10 @@ object ImageUtil {
      * panel border was enough to disqualify an otherwise empty gutter, and disqualifying gutters is
      * exactly how a cut ends up in the artwork instead.
      */
-    private fun measure(line: IntArray, shades: IntArray, noise: IntArray, index: Int) {
+    private fun measure(line: IntArray, shades: IntArray, noise: IntArray, index: Int, histogram: IntArray) {
         // Green alone tracks brightness closely enough to spot a flat line, and is a third of the
         // work of a real luminance.
-        val histogram = IntArray(256)
+        histogram.fill(0)
         for (pixel in line) histogram[(pixel shr 8) and 0xFF]++
 
         var shade = 0
@@ -1046,6 +1144,38 @@ private const val QUIET_NOISE = 0.12f
  * it wrong at both ends.
  */
 private const val MIN_GUTTER_ROWS = 3
+
+private const val MAX_WEBTOON_GAP_HEIGHT = 240
+
+private const val MAX_WEBTOON_TRIM_WORKING_BYTES = 128L * 1024 * 1024
+
+internal fun findWebtoonGapBands(shades: IntArray, noise: IntArray, lineLength: Int): List<IntRange> {
+    if (lineLength <= 0 || shades.size != noise.size) return emptyList()
+
+    val emptyNoise = lineLength * FLAT_NOISE
+    val maxBandRows = MAX_WEBTOON_GAP_HEIGHT / GUTTER_SAMPLE_STEP
+    val result = mutableListOf<IntRange>()
+    var start = -1
+
+    fun closeBand(end: Int) {
+        if (start >= 0) {
+            val length = end - start
+            if (start > 0 && end < shades.size && length in MIN_GUTTER_ROWS..maxBandRows) {
+                result += start until end
+            }
+        }
+        start = -1
+    }
+
+    for (row in shades.indices) {
+        val flat = noise[row] <= emptyNoise
+        val joins = flat && start >= 0 && abs(shades[row] - shades[start]) <= FLAT_TOLERANCE
+        if (!joins) closeBand(row)
+        if (flat && start < 0) start = row
+    }
+    closeBand(shades.size)
+    return result
+}
 
 /**
  * The scan line to cut on: the middle of the gutter band nearest [idealRow], or -1 if there is none.

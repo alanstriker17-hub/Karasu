@@ -55,6 +55,7 @@ class ReaderPagedView @JvmOverloads constructor(context: Context, attrs: Attribu
             val isWebtoonView = ReadingModeType.isWebtoonType(mangaViewer)
             val hasMargins = mangaViewer == ReadingModeType.CONTINUOUS_VERTICAL.flagValue
             cropBordersWebtoon.bindToPreference(if (hasMargins) preferences.cropBorders() else preferences.cropBordersWebtoon())
+            trimWebtoonGaps.bindToPreference(preferences.trimWebtoonGaps())
             webtoonSidePadding.bindToIntPreference(
                 preferences.webtoonSidePadding(),
                 R.array.webtoon_side_padding_values,
@@ -92,6 +93,7 @@ class ReaderPagedView @JvmOverloads constructor(context: Context, attrs: Attribu
         ).forEach { it.isVisible = show }
         listOf(
             binding.cropBordersWebtoon,
+            binding.trimWebtoonGaps,
             binding.webtoonSidePadding,
             binding.webtoonEnableZoomOut,
             binding.webtoonEnableDoubleTapZoom,

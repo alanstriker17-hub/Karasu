@@ -215,6 +215,8 @@ class MangaDetailsController :
 
     private val manga: Manga? get() = if (presenter.isMangaLateInitInitialized()) presenter.manga else null
     private var colorAnimator: ValueAnimator? = null
+    private var fabScrollListener: RecyclerView.OnScrollListener? = null
+    private var toolbarScrollListener: RecyclerView.OnScrollListener? = null
     override val presenter: MangaDetailsPresenter
     private var coverColor: Int? = null
     private var accentColor: Int? = null
@@ -278,10 +280,11 @@ class MangaDetailsController :
         binding.fastScroller.addOnScrollStateChangeListener {
             activityBinding?.appBar?.y = 0f
         }
-        binding.recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+        fabScrollListener = object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
 
+                if (!isBindingInitialized) return
                 if (isTablet) return
 
                 when {
@@ -312,7 +315,7 @@ class MangaDetailsController :
                     binding.fab.show()
                 }
             }
-        })
+        }.also(binding.recycler::addOnScrollListener)
         binding.fab.transitionName = "details start reading transition"
         binding.fab.setOnClickListener { readNextChapter(it) }
 
@@ -559,6 +562,12 @@ class MangaDetailsController :
     }
 
     override fun onDestroyView(view: View) {
+        if (isBindingInitialized) {
+            fabScrollListener?.let(binding.recycler::removeOnScrollListener)
+            toolbarScrollListener?.let(binding.recycler::removeOnScrollListener)
+        }
+        fabScrollListener = null
+        toolbarScrollListener = null
         snack?.dismiss()
         snack = null
         adapter = null
@@ -608,10 +617,11 @@ class MangaDetailsController :
                 colorToolbar(it)
             },
         )
-        binding.recycler.addOnScrollListener(
+        toolbarScrollListener =
             object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     super.onScrolled(recyclerView, dx, dy)
+                    if (!isBindingInitialized) return
                     if (!isTablet) {
                         updateToolbarTitleAlpha(isScrollingDown = dy > 0 && !binding.root.context.isTablet())
                         val atTop = !recyclerView.canScrollVertically(-1)
@@ -622,12 +632,12 @@ class MangaDetailsController :
                 }
 
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (!isBindingInitialized) return
                     val atTop = !recyclerView.canScrollVertically(-1)
                     updateToolbarTitleAlpha()
                     if (atTop) getHeader()?.binding?.backdrop?.translationY = 0f
                 }
-            },
-        )
+            }.also(binding.recycler::addOnScrollListener)
 
         binding.touchView.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
@@ -1577,8 +1587,9 @@ class MangaDetailsController :
     }
 
     private fun updateToolbarTitleAlpha(@FloatRange(from = 0.0, to = 1.0) alpha: Float? = null, isScrollingDown: Boolean = false) {
-        if ((!isControllerVisible && alpha == null) || isScrollingDown) return
+        if (view == null || !isBindingInitialized || (!isControllerVisible && alpha == null) || isScrollingDown) return
         val scrolledList = binding.recycler
+        val layoutManager = scrolledList.layoutManager as? LinearLayoutManager ?: return
         val toolbarTextView = activityBinding?.toolbar?.toolbarTitle ?: return
         val tbAlpha = when {
             isTablet -> 0f
@@ -1586,8 +1597,8 @@ class MangaDetailsController :
             alpha != null -> alpha
 
             // First item isn't in view, full opacity
-            ((scrolledList.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition() > 0) -> 1f
-            ((scrolledList.layoutManager as LinearLayoutManager).findFirstCompletelyVisibleItemPosition() == 0) -> 0f
+            layoutManager.findFirstVisibleItemPosition() > 0 -> 1f
+            layoutManager.findFirstCompletelyVisibleItemPosition() == 0 -> 0f
 
             // Based on scroll amount when first item is in view
             else -> (scrolledList.computeVerticalScrollOffset() - (20.dpToPx))

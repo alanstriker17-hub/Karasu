@@ -6,7 +6,11 @@ import eu.kanade.tachiyomi.network.interceptor.AutoUserAgentInterceptor
 import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import eu.kanade.tachiyomi.network.interceptor.HostCircuitBreakerInterceptor
 import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
+import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import okhttp3.Cache
 import okhttp3.OkHttpClient
@@ -46,6 +50,12 @@ class NetworkHelper(
                     if (flareSolverr.isEnabled) flareSolverr.userAgents[host] else null
                 },
             )
+            // Some extension clients require this named interceptor on the shared default client.
+            .addInterceptor(
+                UserAgentInterceptor(::defaultUserAgent) { host ->
+                    if (flareSolverr.isEnabled) flareSolverr.userAgents[host] else null
+                },
+            )
             // No IgnoreGzip/Brotli here: KeiSource (extension-lib 1.6) asserts they are absent on
             // the host client and refuses to build on top of it otherwise. Sources that want
             // brotli or zstd add OkHttp's own CompressionInterceptor to their own client.
@@ -75,6 +85,39 @@ class NetworkHelper(
         builder.build()
     }
 
+    private data class CachedSourceClient(
+        val route: SourceNetworkRoute,
+        val client: OkHttpClient,
+    )
+
+    private val sourceClients = ConcurrentHashMap<Long, CachedSourceClient>()
+
+    fun clientForSource(sourceId: Long): OkHttpClient {
+        val routes = parseSourceNetworkRoutes(preferences.sourceNetworkRoutes().get())
+            .getOrElse { throw IllegalStateException("Invalid per-source network routes", it) }
+        val route = routes.firstOrNull { it.sourceId == sourceId }
+        if (route == null) {
+            sourceClients.remove(sourceId)
+            return client
+        }
+
+        sourceClients[sourceId]?.takeIf { it.route == route }?.let { return it.client }
+
+        val builder = client.newBuilder()
+        route.proxyType?.let { proxyType ->
+            val type = when (proxyType) {
+                SourceNetworkRoute.ProxyType.HTTP -> Proxy.Type.HTTP
+                SourceNetworkRoute.ProxyType.SOCKS5 -> Proxy.Type.SOCKS
+            }
+            builder.proxy(Proxy(type, InetSocketAddress.createUnresolved(route.proxyHost!!, route.proxyPort!!)))
+        }
+        if (route.useCloudflareDoh) {
+            builder.dohCloudflare()
+        }
+
+        return builder.build().also { sourceClients[sourceId] = CachedSourceClient(route, it) }
+    }
+
     @Deprecated("The regular client handles Cloudflare by default")
     @Suppress("UNUSED")
     val cloudflareClient: OkHttpClient = client
@@ -84,6 +127,9 @@ class NetworkHelper(
             val configured = preferences.defaultUserAgent().get().replace("\n", " ").trim()
             return configured
                 .takeUnless { it.isBlank() || it == NetworkPreferences.DEFAULT_USER_AGENT }
-                ?: WebSettings.getDefaultUserAgent(context).replace("\n", " ").trim()
+                ?: systemUserAgent
         }
+
+    private val systemUserAgent =
+        WebSettings.getDefaultUserAgent(context.applicationContext).replace("\n", " ").trim()
 }

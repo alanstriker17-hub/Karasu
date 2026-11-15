@@ -143,7 +143,7 @@ abstract class DelegatedHttpSource(val delegate: HttpSource): HttpSource() {
      * You must NEVER call super.client if you override this!
      */
     open val baseHttpClient: OkHttpClient? = null
-    open val networkHttpClient: OkHttpClient get() = network.client
+    open val networkHttpClient: OkHttpClient get() = network.clientForSource(id)
 
     /**
      * Visible name of the source.
